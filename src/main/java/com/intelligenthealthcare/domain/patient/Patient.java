@@ -1,4 +1,4 @@
-package com.intelligenthealthcare.domain;
+package com.intelligenthealthcare.entity.patient;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
