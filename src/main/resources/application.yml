@@ -5,10 +5,10 @@ spring:
   application:
     name: intelligent-healthcare
   datasource:
-    url: jdbc:postgresql://localhost:5432/intelligent_healthcare
-    username: postgres
-    password: postgres
-    driver-class-name: org.postgresql.Driver
+    url: jdbc:mysql://localhost:3306/intelligent_healthcare?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: update

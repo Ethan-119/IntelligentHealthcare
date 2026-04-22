@@ -1,6 +1,6 @@
 package com.intelligenthealthcare.service.impl;
 
-import com.intelligenthealthcare.domain.Patient;
+import com.intelligenthealthcare.entity.patient.Patient;
 import com.intelligenthealthcare.repository.PatientRepository;
 import com.intelligenthealthcare.service.PatientService;
 import org.springframework.stereotype.Service;

@@ -1,6 +1,6 @@
 package com.intelligenthealthcare.repository;
 
-import com.intelligenthealthcare.domain.Patient;
+import com.intelligenthealthcare.entity.patient.Patient;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

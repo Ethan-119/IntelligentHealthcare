@@ -1,6 +1,6 @@
 package com.intelligenthealthcare.service;
 
-import com.intelligenthealthcare.domain.Patient;
+import com.intelligenthealthcare.entity.patient.Patient;
 
 import java.util.List;
 import java.util.Optional;
