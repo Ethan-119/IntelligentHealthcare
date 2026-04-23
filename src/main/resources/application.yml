@@ -1,24 +1,35 @@
+# 内嵌 Web 服务端口
 server:
   port: 8080
 
 spring:
   application:
     name: intelligent-healthcare
+  # 本机 MySQL；生产请用环境变量或配置中心，勿提交生产口令
   datasource:
     url: jdbc:mysql://localhost:3306/intelligent_healthcare?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
-    password: root
+    password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
+      # 开发用自动建表/改表；上线请改为 none/validate 并配合显式迁移工具
       ddl-auto: update
     show-sql: true
     properties:
       hibernate:
         format_sql: true
 
+# Actuator 暴露的端点，供运维与健康检查
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+
+# JWT：与 com.intelligenthealthcare.auth 模块对应；生产务必用长随机 secret（如 32+ 字节），并通过环境变量覆盖
+app:
+  jwt:
+    secret: "change-me-dev-only-use-32-chars-minimum-key!!"
+    # accessToken 在签发后的大致有效毫秒数，需与客户端刷新策略配合
+    expiration-ms: 86400000
