@@ -3,7 +3,7 @@ package com.intelligenthealthcare.auth.infrastructure.web;
 import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
 import com.intelligenthealthcare.auth.infrastructure.jwt.JwtService;
 import com.intelligenthealthcare.patient.domain.model.Patient;
-import com.intelligenthealthcare.patient.infrastructure.persistence.PatientRepository;
+import com.intelligenthealthcare.patient.domain.repository.PatientRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -59,8 +59,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     /** 将当前患者写入 {@code SecurityContext}，供控制器通过 {@code @AuthenticationPrincipal} 取当前用户。 */
     private void setContext(Patient patient) {
-        var principal = new PatientAuthPrincipal(
-                patient.getId(), patient.getPhone(), patient.getEmail(), patient.getName());
+        var principal = new PatientAuthPrincipal(patient.getId(), patient.getPhone(), patient.getUsername());
         var auth = new UsernamePasswordAuthenticationToken(
                 principal,
                 null,

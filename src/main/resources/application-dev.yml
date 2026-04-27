@@ -1,10 +1,6 @@
 spring:
-  ai:
-    openai:
-      api-key: ${DASHSCOPE_API_KEY:}
-      base-url: https://dashscope.aliyuncs.com/compatible-mode
-      chat:
-        options:
-          model: qwen-plus
-          temperature: 0.3
-          max-tokens: 1024
+  # 开发：启动时执行 db/init/vector.sql（无权限则改 mode: never 并手工建扩展）
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/init/vector.sql

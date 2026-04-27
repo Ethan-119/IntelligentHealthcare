@@ -2,10 +2,15 @@ package com.intelligenthealthcare.importjob.domain.model;
 
 import com.intelligenthealthcare.knowledge.domain.model.DiseaseAlias;
 import com.intelligenthealthcare.knowledge.domain.model.DiseaseMaster;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 /**
  * 单行在领域规则下处理后的结果，供应用层落库。不包含持久化，仅描述要做什么。
  */
+@Getter
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public final class ImportLineProcessResult {
 
     public enum Outcome {
@@ -22,19 +27,6 @@ public final class ImportLineProcessResult {
     private final ImportReviewDraft review;
     private final DiseaseMaster masterToInsert;
     private final DiseaseAlias aliasToInsert;
-
-    private ImportLineProcessResult(
-            Outcome outcome,
-            String failureMessage,
-            ImportReviewDraft review,
-            DiseaseMaster masterToInsert,
-            DiseaseAlias aliasToInsert) {
-        this.outcome = outcome;
-        this.failureMessage = failureMessage;
-        this.review = review;
-        this.masterToInsert = masterToInsert;
-        this.aliasToInsert = aliasToInsert;
-    }
 
     public static ImportLineProcessResult fail(String message) {
         return new ImportLineProcessResult(Outcome.FAIL, message, null, null, null);
@@ -58,25 +50,5 @@ public final class ImportLineProcessResult {
 
     public static ImportLineProcessResult skipAlias() {
         return new ImportLineProcessResult(Outcome.SKIP_DISEASE_ALIAS, null, null, null, null);
-    }
-
-    public Outcome getOutcome() {
-        return outcome;
-    }
-
-    public String getFailureMessage() {
-        return failureMessage;
-    }
-
-    public ImportReviewDraft getReview() {
-        return review;
-    }
-
-    public DiseaseMaster getMasterToInsert() {
-        return masterToInsert;
-    }
-
-    public DiseaseAlias getAliasToInsert() {
-        return aliasToInsert;
     }
 }

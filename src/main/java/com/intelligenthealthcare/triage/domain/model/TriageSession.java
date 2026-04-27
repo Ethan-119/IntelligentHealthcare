@@ -1,66 +1,68 @@
 package com.intelligenthealthcare.triage.domain.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
-@Entity
-@Table(name = "triage_session")
+@TableName("triage_session")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class TriageSession {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
-    @Column(name = "session_id", nullable = false, unique = true, length = 64)
+
+    @TableField("session_id")
     private String sessionId;
-    @Column(name = "user_id", length = 64)
+
+    @TableField("user_id")
     private String userId;
-    @Column(name = "dialog_id", length = 64)
+
+    @TableField("dialog_id")
     private String dialogId;
-    @Column(name = "current_stage", length = 32)
+
+    @TableField("current_stage")
     private String currentStage;
-    @Column(name = "ask_round")
+
+    @TableField("ask_round")
     private Integer askRound;
-    @Column(name = "invalid_answer_count")
+
+    @TableField("invalid_answer_count")
     private Integer invalidAnswerCount;
-    @Column(name = "city", length = 64)
+
     private String city;
-    @Column(name = "area", length = 64)
     private String area;
-    @Column(name = "nearby")
     private Integer nearby;
-    @Column(name = "latitude", precision = 10, scale = 6)
+
     private BigDecimal latitude;
-    @Column(name = "longitude", precision = 10, scale = 6)
     private BigDecimal longitude;
-    @Column(name = "patient_age")
+
+    @TableField("patient_age")
     private Integer patientAge;
-    @Column(name = "patient_gender", length = 32)
+
+    @TableField("patient_gender")
     private String patientGender;
-    @Column(name = "severity_level", length = 32)
+
+    @TableField("severity_level")
     private String severityLevel;
-    @Column(name = "route_type", length = 32)
+
+    @TableField("route_type")
     private String routeType;
-    @Column(name = "status", length = 32)
+
     private String status;
-    @CreationTimestamp
-    @Column(name = "create_time", updatable = false)
+
+    @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
-    @UpdateTimestamp
-    @Column(name = "update_time")
+
+    @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 }

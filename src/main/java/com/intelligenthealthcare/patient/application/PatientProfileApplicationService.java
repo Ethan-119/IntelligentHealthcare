@@ -2,15 +2,15 @@ package com.intelligenthealthcare.patient.application;
 
 import com.intelligenthealthcare.auth.api.dto.CurrentPatientResponse;
 import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
+import com.intelligenthealthcare.patient.domain.exception.PatientNotFoundException;
+import com.intelligenthealthcare.patient.domain.exception.PatientPhoneAlreadyUsedException;
 import com.intelligenthealthcare.patient.domain.model.Gender;
 import com.intelligenthealthcare.patient.domain.model.Patient;
 import com.intelligenthealthcare.patient.domain.model.TriagePrefer;
 import com.intelligenthealthcare.patient.domain.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -23,7 +23,11 @@ public class PatientProfileApplicationService {
      * 获取当前登录用户信息
      */
     public CurrentPatientResponse me(PatientAuthPrincipal principal) {
-        return CurrentPatientResponse.fromEntity(patientRepository.findById(principal.getId()).orElseThrow(this::userNotFound));
+        Patient patient = patientRepository.findById(principal.getId()).orElse(null);
+        if (patient == null) {
+            throw userNotFound();
+        }
+        return CurrentPatientResponse.fromEntity(patient);
     }
 
     /**
@@ -40,7 +44,10 @@ public class PatientProfileApplicationService {
             String area,
             TriagePrefer triagePrefer) {
 
-        Patient patient = patientRepository.findById(principal.getId()).orElseThrow(this::userNotFound);
+        Patient patient = patientRepository.findById(principal.getId()).orElse(null);
+        if (patient == null) {
+            throw userNotFound();
+        }
 
         // 手机号唯一性校验（DDD 应用层负责跨实体规则校验）
         validatePhoneUniqueness(patient, phone);
@@ -51,7 +58,6 @@ public class PatientProfileApplicationService {
 
         return CurrentPatientResponse.fromEntity(patient);
     }
-
     // ==================== 私有工具方法 ====================
     private void validatePhoneUniqueness(Patient patient, String newPhone) {
         if (newPhone == null || newPhone.isBlank()) return;
@@ -60,12 +66,12 @@ public class PatientProfileApplicationService {
         boolean isSameUser = newPhone.trim().equals(patient.getPhone());
 
         if (!isSameUser && phoneExists) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "该手机号已被使用");
+            throw new PatientPhoneAlreadyUsedException();
         }
     }
 
 
-    private ResponseStatusException userNotFound() {
-        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户不存在或已删除");
+    private PatientNotFoundException userNotFound() {
+        return new PatientNotFoundException();
     }
 }

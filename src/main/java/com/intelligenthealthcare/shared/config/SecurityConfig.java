@@ -29,7 +29,7 @@ import java.util.Map;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    /** 与数据库存储的 {@code passwordHash} 配合，使用 BCrypt 自适应哈希。 */
+    /** 与数据库存储的 {@code password} 密文字段配合，使用 BCrypt 自适应哈希。 */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -47,7 +47,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 浏览器跨域预检
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // 首页、健康检查、注册与登录不校验 JWT；其余 /api 默认需已认证
+                        // 首页、健康检查、注册与登录不校验 JWT；管理端 /api/admin/** 与其余 /api 同策略：需已认证
                         .requestMatchers(
                                 "/",
                                 "/index.html",

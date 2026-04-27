@@ -2,16 +2,22 @@
 
 知识库**批量导入**限界上下文：任务记录、行级失败日志、需人工审核项，以及 Excel/CSV 解析。领域规则不写在应用服务中，而放在 `domain` 的策略、值对象与工厂。
 
+## DDD 分层与命名
+
+- **应用服务**（`application.ImportJobApplicationService`）：在经典 DDD 中即 **Application Service**，负责**用例编排**与事务意图边界；**不**放业务规则，也**不**直接依赖 MyBatis/Mapper，只依赖 **domain 仓储接口**。
+- **领域服务**（`domain.service`）：`DiseaseMasterImportPolicy` 等，承载无法单独归属某一实体上的规则（策略）。
+- **仓储**（`domain.repository` + `infrastructure` 实现）：`ImportJobRecordRepository`、`ImportFailureLogRepository`、`ImportReviewItemRepository` 对应本限界上下文的表；`KnowledgeImportRepository` 表示对**知识库**上下文的读写在领域侧的抽象（可视为防腐/仓储合一，由 `MybatisKnowledgeImportRepository` 实现）。
+
 ## 职责边界
 
 - **api**：`ImportJobController`（路径前缀 `/api/admin/import/jobs`）上传、任务列表/详情、失败行、待审核列表、将待办标为已解决。
-- **application**：`ImportJobApplicationService` 仅做编排：建任务、读文件、按行调领域结果并写库；持久化经 **防腐层** 访问知识表。
+- **application**：`ImportJobApplicationService` 只做编排与调用；持久化**仅通过** `domain.repository` 的实现类完成。
 - **domain**：
-  - **model**：`ImportTableRow`、`ImportJobProgress`、`DiseaseMasterImportLine` / `DiseaseAliasImportLine` 等值对象与解析结果；`ImportFailureLog`、`ImportReviewItem` 等实体的领域工厂/行为（如 `fromLineError`、`markResolvedWithNote`）。
-  - **service**：`DiseaseMasterImportPolicy`、`DiseaseAliasImportPolicy`（去重、是否进待办等规则）。
-  - **port**：`KnowledgeImportGateway` 接口，对领域屏蔽 MyBatis。
+  - **model**：`ImportTableRow`、`ImportJobProgress` 等本模块内对象；**不**复制 `knowledge` 的实体，业务表行直接解析/组装为 `com.intelligenthealthcare.knowledge.domain.model` 下实体（`DiseaseMaster`、`DiseaseAlias` 等）并在策略类中使用；`ImportFailureLog`、`ImportReviewItem` 等实体的领域工厂/行为（如 `fromLineError`、`markResolvedWithNote`）。
+  - **service**：`DiseaseMasterImportPolicy`、`DiseaseAliasImportPolicy`（**解析 +** 去重/是否进待办等规则；解析结果以内嵌 `ParsedRow` 携带，不另建与知识实体平行的 `*ImportLine` 类）。
+  - **repository**：仓储**接口**（本模块 + 对知识库导入的 `KnowledgeImportRepository`）。
   - **ImportJobFactory**：创建运行中任务、文件名安全截断。
-- **infrastructure**：`ImportFileTableReader`（首行表头、`.csv` / `.xlsx` / `.xls`）、`KnowledgeImportGatewayImpl`、各表 Mapper。
+- **infrastructure**：`ImportFileTableReader`；`infrastructure/persistence` 下 `Mybatis*Repository` 实现各仓储；底层仍使用 MyBatis `Mapper`（仅实现类可见）。
 
 ## 主要 HTTP 接口
 

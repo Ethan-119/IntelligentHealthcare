@@ -1,49 +1,70 @@
 package com.intelligenthealthcare.importjob.domain.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
-@Entity
-@Table(name = "import_review_item")
+@TableName("import_review_item")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class ImportReviewItem {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
-    @Column(name = "job_id", nullable = false)
+
+    @TableField("job_id")
     private Long jobId;
-    @Column(name = "dataset_type", length = 64)
+
+    @TableField("dataset_type")
     private String datasetType;
-    @Column(name = "item_key", length = 128)
+
+    @TableField("item_key")
     private String itemKey;
-    @Column(name = "issue_type", length = 128)
+
+    @TableField("issue_type")
     private String issueType;
-    @Column(name = "raw_content", columnDefinition = "TEXT")
+
+    @TableField("raw_content")
     private String rawContent;
-    @Column(name = "suggestion", length = 500)
+
     private String suggestion;
-    @Column(name = "resolved")
     private Integer resolved;
-    @Column(name = "resolution_note", length = 500)
+
+    @TableField("resolution_note")
     private String resolutionNote;
-    @UpdateTimestamp
-    @Column(name = "update_time")
+
+    @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
-    @CreationTimestamp
-    @Column(name = "create_time", updatable = false)
+
+    @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
+
+    public static ImportReviewItem fromDraft(long jobId, ImportReviewDraft draft) {
+        if (draft == null) {
+            return null;
+        }
+        return ImportReviewItem.builder()
+                .jobId(jobId)
+                .datasetType(draft.getDatasetType())
+                .itemKey(draft.getItemKey())
+                .issueType(draft.getIssueType())
+                .rawContent(draft.getRawContent())
+                .suggestion(draft.getSuggestion())
+                .resolved(0)
+                .build();
+    }
+
+    /** 管理员将待办标为已处理。 */
+    public void markResolvedWithNote(String resolutionNote) {
+        this.resolved = 1;
+        this.resolutionNote = resolutionNote;
+    }
 }

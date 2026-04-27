@@ -5,20 +5,45 @@ server:
 spring:
   application:
     name: intelligent-healthcare
-  # 本机 MySQL；生产请用环境变量或配置中心，勿提交生产口令
+  # 管理端批量导入：Excel/CSV
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+  # 与阿里云百炼 / DashScope 兼容（对话 + 嵌入）；密钥用环境变量 DASHSCOPE_API_KEY
+  ai:
+    openai:
+      api-key: ${DASHSCOPE_API_KEY:}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      chat:
+        options:
+          model: qwen-plus
+          temperature: 0.3
+          max-tokens: 1024
+      embedding:
+        options:
+          model: text-embedding-v3
+          dimensions: 1024
+  # 本机 PostgreSQL（需已安装 pgvector 扩展，见 application-dev 中 sql init 或手工执行 db/init/vector.sql）
   datasource:
-    url: jdbc:mysql://localhost:3306/intelligent_healthcare?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  jpa:
-    hibernate:
-      # 开发用自动建表/改表；上线请改为 none/validate 并配合显式迁移工具
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
+    url: jdbc:postgresql://localhost:5432/intelligent_healthcare?stringtype=unspecified
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  # 表结构需 Flyway/Liquibase/手工维护；本配置不再做 JPA 自动建表
+  sql:
+    init:
+      mode: never
+
+# MyBatis-Plus：Mapper 在 **/infrastructure/persistence 下
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+  type-handlers-package: com.intelligenthealthcare.shared.infrastructure.mybatis
 
 # Actuator 暴露的端点，供运维与健康检查
 management:
@@ -33,3 +58,6 @@ app:
     secret: "change-me-dev-only-use-32-chars-minimum-key!!"
     # accessToken 在签发后的大致有效毫秒数，需与客户端刷新策略配合
     expiration-ms: 86400000
+  # 与通义 / DashScope text-embedding-v3 的 dimensions 及实体列 vector(N) 保持一致
+  rag:
+    embedding-dimensions: 1024

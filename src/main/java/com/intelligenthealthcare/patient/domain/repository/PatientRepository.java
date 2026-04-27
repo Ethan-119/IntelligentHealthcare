@@ -8,8 +8,11 @@ import java.util.Optional;
  */
 public interface PatientRepository {
 
-    // 必须！获取当前登录用户
+    // 获取当前登录用户
     Optional<Patient> findById(Long id);
+
+    // 根据手机号定位登录用户
+    Optional<Patient> findByPhone(String phone);
 
     boolean existsByPhone(String phone);
 

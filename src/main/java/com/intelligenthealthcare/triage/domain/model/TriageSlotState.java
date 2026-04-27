@@ -1,47 +1,49 @@
 package com.intelligenthealthcare.triage.domain.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
-@Entity
-@Table(name = "triage_slot_state")
+@TableName("triage_slot_state")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class TriageSlotState {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
-    @Column(name = "session_id", nullable = false, unique = true, length = 64)
+
+    @TableField("session_id")
     private String sessionId;
-    @Column(name = "symptoms_json", columnDefinition = "TEXT")
+
+    @TableField("symptoms_json")
     private String symptomsJson;
-    @Column(name = "disease_name", length = 255)
+
+    @TableField("disease_name")
     private String diseaseName;
-    @Column(name = "target_hospital", length = 255)
+
+    @TableField("target_hospital")
     private String targetHospital;
-    @Column(name = "target_department", length = 255)
+
+    @TableField("target_department")
     private String targetDepartment;
-    @Column(name = "target_doctor", length = 255)
+
+    @TableField("target_doctor")
     private String targetDoctor;
-    @Column(name = "missing_slots_json", columnDefinition = "TEXT")
+
+    @TableField("missing_slots_json")
     private String missingSlotsJson;
-    @CreationTimestamp
-    @Column(name = "create_time", updatable = false)
+
+    @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
-    @UpdateTimestamp
-    @Column(name = "update_time")
+
+    @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 }

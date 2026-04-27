@@ -27,6 +27,13 @@ public class MybatisPatientRepository implements PatientRepository {
     }
 
     @Override
+    public Optional<Patient> findByPhone(String phone) {
+        LambdaQueryWrapper<Patient> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(Patient::getPhone, phone);
+        return Optional.ofNullable(patientMapper.selectOne(queryWrapper));
+    }
+
+    @Override
     public Patient save(Patient patient) {
         if (patient.getId() == null) {
             patientMapper.insert(patient);

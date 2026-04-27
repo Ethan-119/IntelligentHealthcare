@@ -1,49 +1,50 @@
 package com.intelligenthealthcare.importjob.domain.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
-@Entity
-@Table(name = "import_job_record")
+@TableName("import_job_record")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class ImportJobRecord {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
-    @Column(name = "dataset_type", nullable = false, length = 64)
+
+    @TableField("dataset_type")
     private String datasetType;
-    @Column(name = "file_name", length = 255)
+
+    @TableField("file_name")
     private String fileName;
-    @Column(name = "status", nullable = false, length = 32)
+
     private String status;
-    @Column(name = "success_count")
+
+    @TableField("success_count")
     private Integer successCount;
-    @Column(name = "failure_count")
+
+    @TableField("failure_count")
     private Integer failureCount;
-    @Column(name = "review_count")
+
+    @TableField("review_count")
     private Integer reviewCount;
-    @Column(name = "auto_mapped_count")
+
+    @TableField("auto_mapped_count")
     private Integer autoMappedCount;
-    @Column(name = "message", length = 500)
+
     private String message;
-    @CreationTimestamp
-    @Column(name = "create_time", updatable = false)
+
+    @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
-    @UpdateTimestamp
-    @Column(name = "update_time")
+
+    @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 }

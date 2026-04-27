@@ -14,21 +14,18 @@ public final class PatientAuthPrincipal {
 
     private final Long id;
     private final String phone;
-    private final String email;
-    private final String name;
+    private final String username;
 
     /**
      * 数据组装器
      * @param id
      * @param phone
-     * @param email
-     * @param name
+     * @param username
      */
-    public PatientAuthPrincipal(Long id, String phone, String email, String name) {
+    public PatientAuthPrincipal(Long id, String phone, String username) {
         this.id = Objects.requireNonNull(id, "id");
-        this.name = Objects.requireNonNull(name, "name");
         this.phone = phone;
-        this.email = email;
+        this.username = username;
     }
 
 }

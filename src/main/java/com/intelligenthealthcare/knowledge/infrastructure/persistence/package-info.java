@@ -1,1 +1,0 @@
-package com.intelligenthealthcare.knowledge.infrastructure.persistence;
