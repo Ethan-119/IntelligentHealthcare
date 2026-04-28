@@ -11,7 +11,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 供 RAG 使用的文本块与向量，存 PostgreSQL + pgvector。
+ * 供 RAG 使用的文本块与向量。
+ * 当前业务口径为 MongoDB 向量知识库。
+ * 本实体保留用于兼容历史 PostgreSQL/pgvector 数据链路。
  */
 @TableName("rag_document_chunks")
 @Data

@@ -11,7 +11,8 @@ import org.apache.ibatis.type.MappedTypes;
 import org.postgresql.util.PGobject;
 
 /**
- * PostgreSQL {@code vector(n)} 与 {@code float[]} 映射，用于 RAG 嵌入列。
+ * PostgreSQL {@code vector(n)} 与 {@code float[]} 映射。
+ * 当前仅用于历史兼容链路；MongoDB 向量检索稳定后可下线。
  */
 @MappedTypes(float[].class)
 @MappedJdbcTypes(JdbcType.OTHER)

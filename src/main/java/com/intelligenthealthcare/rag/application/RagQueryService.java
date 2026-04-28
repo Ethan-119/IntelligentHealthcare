@@ -12,7 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * 查询向量：对问题做嵌入后在 PostgreSQL 中做近邻检索。
+ * 查询向量：对问题做嵌入后执行近邻检索。
+ * 当前口径为 MongoDB 向量检索；本实现为历史 PostgreSQL/pgvector 兼容链路。
  */
 @Service
 public class RagQueryService {

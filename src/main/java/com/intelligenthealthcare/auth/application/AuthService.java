@@ -11,12 +11,15 @@ import com.intelligenthealthcare.patient.domain.model.Gender;
 import com.intelligenthealthcare.patient.domain.model.Patient;
 import com.intelligenthealthcare.patient.domain.model.TriagePrefer;
 import com.intelligenthealthcare.patient.domain.repository.PatientRepository;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * 患者注册/登录与当前用户信息；密码仅经 {@link org.springframework.security.crypto.password.PasswordEncoder} 单向存储。
@@ -28,16 +31,19 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
+    private final StringRedisTemplate stringRedisTemplate;
 
     public AuthService(
             PatientRepository patientRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
-            JwtProperties jwtProperties) {
+            JwtProperties jwtProperties,
+            StringRedisTemplate stringRedisTemplate) {
         this.patientRepository = patientRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     /** 注册新用户：校验手机号唯一，初始化导诊上下文并签发 JWT。 */
@@ -112,14 +118,25 @@ public class AuthService {
     }
 
     private TokenResponse buildTokenResponse(Patient patient) {
-        // expiresInMs 与 app.jwt.expiration-ms 一致，供前端与 token 内 exp 同步展示
+        // 第一步：签发 JWT
         String token = jwtService.createToken(patient.getId());
+        // 第二步：把最新 token 写入 Redis（同一用户后登录会覆盖旧 token）
+        stringRedisTemplate.opsForValue().set(
+                buildTokenKey(patient.getId()),
+                token,
+                jwtProperties.expirationMs(),
+                TimeUnit.MILLISECONDS);
+        // 第三步：返回给前端
         return TokenResponse.builder()
                 .accessToken(token)
                 .tokenType("Bearer")
                 .expiresInMs(jwtProperties.expirationMs())
                 .user(CurrentPatientResponse.fromEntity(patient))
                 .build();
+    }
+
+    private static String buildTokenKey(Long patientId) {
+        return "auth:token:patient:" + patientId;
     }
 
     /** 空串与纯空白按「未提供」处理。 */

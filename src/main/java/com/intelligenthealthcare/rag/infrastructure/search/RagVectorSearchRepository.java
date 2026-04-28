@@ -7,7 +7,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
- * 使用 pgvector 的 L2 距离算子；参数以文本字面量经 {@code ::vector} 绑定，免注册 JDBC 类型。
+ * PostgreSQL pgvector 历史兼容实现：使用 L2 距离算子；参数以文本字面量经 {@code ::vector} 绑定。
+ * 当前业务口径为 MongoDB 向量检索。
  */
 @Repository
 public class RagVectorSearchRepository {

@@ -24,12 +24,19 @@ spring:
         options:
           model: text-embedding-v3
           dimensions: 1024
-  # 本机 PostgreSQL（需已安装 pgvector 扩展，见 application-dev 中 sql init 或手工执行 db/init/vector.sql）
+  # 主业务库：PostgreSQL（用户/会话/导入任务/日志等结构化数据）
+  # 知识库与向量检索：MongoDB（当前口径）；历史 pgvector 配置仅保留兼容，不再作为主路径
   datasource:
     url: jdbc:postgresql://localhost:5432/intelligent_healthcare?stringtype=unspecified
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 123456
+      database: 1
   # 表结构需 Flyway/Liquibase/手工维护；本配置不再做 JPA 自动建表
   sql:
     init:
@@ -58,6 +65,6 @@ app:
     secret: "change-me-dev-only-use-32-chars-minimum-key!!"
     # accessToken 在签发后的大致有效毫秒数，需与客户端刷新策略配合
     expiration-ms: 86400000
-  # 与通义 / DashScope text-embedding-v3 的 dimensions 及实体列 vector(N) 保持一致
+  # 与 MongoDB 向量索引维度保持一致
   rag:
     embedding-dimensions: 1024

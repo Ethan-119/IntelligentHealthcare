@@ -1,6 +1,5 @@
 spring:
-  # 开发：启动时执行 db/init/vector.sql（无权限则改 mode: never 并手工建扩展）
+  # 当前口径使用 MongoDB 向量知识库；关闭 pgvector 初始化
   sql:
     init:
-      mode: always
-      schema-locations: classpath:db/init/vector.sql
+      mode: never
