@@ -24,6 +24,11 @@ spring:
         options:
           model: text-embedding-v3
           dimensions: 1024
+    # MCP Server（Spring AI）：Streamable HTTP，默认端点见 spring.ai.mcp.server.streamable-http.mcp-endpoint
+    mcp:
+      server:
+        protocol: STREAMABLE
+        type: SYNC
   # 主业务库：PostgreSQL（用户/会话/导入任务/日志等结构化数据）
   # 知识库与向量检索：MongoDB（当前口径）；历史 pgvector 配置仅保留兼容，不再作为主路径
   datasource:

@@ -53,7 +53,10 @@ public class SecurityConfig {
                                 "/index.html",
                                 "/api/health",
                                 "/api/auth/register",
-                                "/api/auth/login"
+                                "/api/auth/login",
+                                // MCP Streamable HTTP（Spring AI），初期开放；生产建议改为专用认证或网络隔离
+                                "/mcp",
+                                "/mcp/**"
                         )
                         .permitAll()
                         .anyRequest()
