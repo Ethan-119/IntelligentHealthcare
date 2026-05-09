@@ -2,7 +2,6 @@ package com.intelligenthealthcare.shared.config;
 
 import com.intelligenthealthcare.shared.security.CurrentPatientArgumentResolver;
 import com.intelligenthealthcare.shared.security.CurrentPatientContextInterceptor;
-import com.intelligenthealthcare.shared.security.LoginRequiredInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -19,15 +18,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private final CurrentPatientArgumentResolver currentPatientArgumentResolver;
     private final CurrentPatientContextInterceptor currentPatientContextInterceptor;
-    private final LoginRequiredInterceptor loginRequiredInterceptor;
 
     public WebMvcConfig(
             CurrentPatientArgumentResolver currentPatientArgumentResolver,
-            CurrentPatientContextInterceptor currentPatientContextInterceptor,
-            LoginRequiredInterceptor loginRequiredInterceptor) {
+            CurrentPatientContextInterceptor currentPatientContextInterceptor) {
         this.currentPatientArgumentResolver = currentPatientArgumentResolver;
         this.currentPatientContextInterceptor = currentPatientContextInterceptor;
-        this.loginRequiredInterceptor = loginRequiredInterceptor;
     }
 
     @Override
@@ -41,8 +37,5 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(currentPatientContextInterceptor)
                 .addPathPatterns("/**")
                 .order(0);
-        registry.addInterceptor(loginRequiredInterceptor)
-                .addPathPatterns("/api/auth/me")
-                .order(1);
     }
 }

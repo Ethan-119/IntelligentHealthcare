@@ -16,7 +16,7 @@ public class RagSearchResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class RagSearchItem {
-        private long id;
+        private String id;
         private String sourceType;
         private String sourceId;
         private String chunkKey;

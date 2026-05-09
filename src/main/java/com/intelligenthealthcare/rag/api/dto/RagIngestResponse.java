@@ -9,5 +9,5 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class RagIngestResponse {
 
-    private long id;
+    private String id;
 }

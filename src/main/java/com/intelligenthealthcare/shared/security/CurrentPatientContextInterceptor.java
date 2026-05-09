@@ -45,6 +45,7 @@ public class CurrentPatientContextInterceptor implements HandlerInterceptor {
                     && StringUtils.hasText(cachedToken)
                     && requestToken.equals(cachedToken)) {
                 CurrentPatientContext.set(principal);
+                // 每次校验通过后刷新 Redis 中 token 的 TTL，实现"活跃期间自动续期"
                 stringRedisTemplate.expire(tokenKey, jwtProperties.expirationMs(), TimeUnit.MILLISECONDS);
                 return true;
             }

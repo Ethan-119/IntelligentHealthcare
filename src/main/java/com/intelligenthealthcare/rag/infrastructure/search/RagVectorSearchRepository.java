@@ -1,61 +1,85 @@
 package com.intelligenthealthcare.rag.infrastructure.search;
 
 import com.intelligenthealthcare.rag.application.dto.RagSearchHitDto;
-import com.intelligenthealthcare.rag.config.RagProperties;
-import java.util.List;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.intelligenthealthcare.rag.domain.model.RagDocumentChunk;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+
 /**
- * PostgreSQL pgvector 历史兼容实现：使用 L2 距离算子；参数以文本字面量经 {@code ::vector} 绑定。
- * 当前业务口径为 MongoDB 向量检索。
+ * MongoDB 向量检索：对候选文档计算 L2 距离后排序返回 topK。
+ * 生产环境大规模数据建议迁移至 MongoDB Atlas Vector Search。
  */
 @Repository
 public class RagVectorSearchRepository {
 
-    private final JdbcTemplate jdbcTemplate;
-    private final String searchSql;
+    private final MongoTemplate mongoTemplate;
 
-    public RagVectorSearchRepository(JdbcTemplate jdbcTemplate, RagProperties ragProperties) {
-        this.jdbcTemplate = jdbcTemplate;
-        int dim = ragProperties.getEmbeddingDimensions();
-        this.searchSql =
-                """
-                SELECT id, source_type, source_id, chunk_key, content, (embedding <-> cast(? as vector(%d))) AS dist
-                FROM rag_document_chunks
-                ORDER BY dist ASC
-                LIMIT ?
-                """
-                        .formatted(dim);
+    public RagVectorSearchRepository(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = mongoTemplate;
     }
 
     public List<RagSearchHitDto> findNearestL2(float[] queryEmbedding, int topK) {
-        String literal = toVectorLiteral(queryEmbedding);
-        return jdbcTemplate.query(
-                searchSql,
-                (rs, row) ->
-                        new RagSearchHitDto(
-                                rs.getLong("id"),
-                                rs.getString("source_type"),
-                                rs.getString("source_id"),
-                                rs.getString("chunk_key"),
-                                rs.getString("content"),
-                                rs.getDouble("dist")),
-                literal,
-                topK);
+        List<RagDocumentChunk> all = mongoTemplate.findAll(RagDocumentChunk.class);
+        if (all.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<ScoredChunk> scored = new ArrayList<>(all.size());
+        for (int i = 0; i < all.size(); i++) {
+            RagDocumentChunk chunk = all.get(i);
+            float[] emb = chunk.getEmbedding();
+            if (emb != null && emb.length == queryEmbedding.length) {
+                double dist = l2Distance(queryEmbedding, emb);
+                scored.add(new ScoredChunk(chunk, dist));
+            }
+        }
+
+        Collections.sort(scored, new Comparator<ScoredChunk>() {
+            @Override
+            public int compare(ScoredChunk a, ScoredChunk b) {
+                return Double.compare(a.dist, b.dist);
+            }
+        });
+
+        int limit = Math.min(topK, scored.size());
+        List<RagSearchHitDto> results = new ArrayList<>(limit);
+        for (int i = 0; i < limit; i++) {
+            ScoredChunk s = scored.get(i);
+            RagDocumentChunk chunk = s.chunk;
+            String sourceType = chunk.getSourceType() != null ? chunk.getSourceType().getCode() : null;
+            RagSearchHitDto hit = new RagSearchHitDto(
+                    chunk.getId(),
+                    sourceType,
+                    chunk.getSourceId(),
+                    chunk.getChunkKey(),
+                    chunk.getContent(),
+                    s.dist);
+            results.add(hit);
+        }
+        return results;
     }
 
-    private static String toVectorLiteral(float[] v) {
-        if (v == null || v.length == 0) {
-            throw new IllegalArgumentException("queryEmbedding 不能为空");
+    private static double l2Distance(float[] a, float[] b) {
+        double sum = 0;
+        for (int i = 0; i < a.length; i++) {
+            double diff = a[i] - b[i];
+            sum += diff * diff;
         }
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < v.length; i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
-            sb.append(v[i]);
+        return Math.sqrt(sum);
+    }
+
+    private static class ScoredChunk {
+        final RagDocumentChunk chunk;
+        final double dist;
+
+        ScoredChunk(RagDocumentChunk chunk, double dist) {
+            this.chunk = chunk;
+            this.dist = dist;
         }
-        return sb.append(']').toString();
     }
 }

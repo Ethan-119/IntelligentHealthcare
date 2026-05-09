@@ -87,13 +87,7 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "手机号无效");
         }
 
-        Patient matchedByPhone = patientRepository.findByPhone(phone).orElse(null);
-        if (matchedByPhone == null || matchedByPhone.getId() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
-        }
-
-        Long patientId = matchedByPhone.getId();
-        Patient patient = patientRepository.findById(patientId).orElse(null);
+        Patient patient = patientRepository.findByPhone(phone).orElse(null);
         if (patient == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }

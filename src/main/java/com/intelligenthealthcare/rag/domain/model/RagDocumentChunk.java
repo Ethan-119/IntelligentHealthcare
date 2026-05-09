@@ -1,42 +1,41 @@
 package com.intelligenthealthcare.rag.domain.model;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.intelligenthealthcare.shared.infrastructure.mybatis.PgVectorFloatTypeHandler;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 /**
- * 供 RAG 使用的文本块与向量。
- * 当前业务口径为 MongoDB 向量知识库。
- * 本实体保留用于兼容历史 PostgreSQL/pgvector 数据链路。
+ * RAG 文本块与向量，存储在 MongoDB 中。
  */
-@TableName("rag_document_chunks")
+@Document(collection = "rag_document_chunks")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class RagDocumentChunk {
 
-    @TableId(type = IdType.AUTO)
-    private Long id;
+    @Id
+    private String id;
 
-    @TableField("source_type")
+    @Field("source_type")
+    @Indexed
     private RagSourceType sourceType;
 
-    @TableField("source_id")
+    @Field("source_id")
+    @Indexed
     private String sourceId;
 
-    @TableField("chunk_key")
+    @Field("chunk_key")
     @Builder.Default
     private String chunkKey = "default";
 
     private String content;
 
-    @TableField(value = "embedding", typeHandler = PgVectorFloatTypeHandler.class)
+    @Field("embedding")
     private float[] embedding;
 }

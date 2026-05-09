@@ -2,64 +2,65 @@ package com.intelligenthealthcare.rag.application;
 
 import com.intelligenthealthcare.rag.config.RagProperties;
 import com.intelligenthealthcare.rag.domain.model.RagDocumentChunk;
-import com.intelligenthealthcare.rag.infrastructure.persistence.RagDocumentChunkMapper;
-import java.util.List;
+import com.intelligenthealthcare.rag.infrastructure.persistence.MongoRagDocumentRepository;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+import java.util.Optional;
+
 /**
- * 将可检索文本写入 {@link RagDocumentChunk}，经 {@link EmbeddingModel} 生成向量。
+ * 将可检索文本写入 MongoDB {@link RagDocumentChunk}，经 {@link EmbeddingModel} 生成向量。
  */
 @Service
 public class RagIngestionService {
 
     private final EmbeddingModel embeddingModel;
-    private final RagDocumentChunkMapper ragDocumentChunkMapper;
+    private final MongoRagDocumentRepository mongoRagDocumentRepository;
     private final RagProperties ragProperties;
 
     public RagIngestionService(
             @Qualifier("openAiEmbeddingModel") EmbeddingModel embeddingModel,
-            RagDocumentChunkMapper ragDocumentChunkMapper,
+            MongoRagDocumentRepository mongoRagDocumentRepository,
             RagProperties ragProperties) {
         this.embeddingModel = embeddingModel;
-        this.ragDocumentChunkMapper = ragDocumentChunkMapper;
+        this.mongoRagDocumentRepository = mongoRagDocumentRepository;
         this.ragProperties = ragProperties;
     }
 
     @Transactional
-    public long upsert(RagIngestCommand command) {
-        String chunkKey =
-                StringUtils.hasText(command.chunkKey()) ? command.chunkKey().trim() : "default";
+    public String upsert(RagIngestCommand command) {
+        String chunkKey = StringUtils.hasText(command.chunkKey()) ? command.chunkKey().trim() : "default";
         float[] vector = embed(command.content());
         if (vector.length != ragProperties.getEmbeddingDimensions()) {
             throw new IllegalStateException(
-                    "嵌入维数 " + vector.length + " 与 app.rag.embedding-dimensions=" + ragProperties.getEmbeddingDimensions() + " 不一致");
+                    "嵌入维数 " + vector.length + " 与 app.rag.embedding-dimensions="
+                            + ragProperties.getEmbeddingDimensions() + " 不一致");
         }
-        var existing =
-                ragDocumentChunkMapper.findBySourceTypeAndSourceIdAndChunkKey(
+        Optional<RagDocumentChunk> existing = mongoRagDocumentRepository
+                .findBySourceTypeAndSourceIdAndChunkKey(
                         command.sourceType(), command.sourceId().trim(), chunkKey);
         RagDocumentChunk entity;
         if (existing.isPresent()) {
             entity = existing.get();
             entity.setContent(command.content());
             entity.setEmbedding(vector);
-            ragDocumentChunkMapper.updateById(entity);
+            mongoRagDocumentRepository.update(entity);
             return entity.getId();
         }
-        entity =
-                RagDocumentChunk.builder()
-                        .sourceType(command.sourceType())
-                        .sourceId(command.sourceId().trim())
-                        .chunkKey(chunkKey)
-                        .content(command.content())
-                        .embedding(vector)
-                        .build();
-        ragDocumentChunkMapper.insert(entity);
+        entity = RagDocumentChunk.builder()
+                .sourceType(command.sourceType())
+                .sourceId(command.sourceId().trim())
+                .chunkKey(chunkKey)
+                .content(command.content())
+                .embedding(vector)
+                .build();
+        mongoRagDocumentRepository.insert(entity);
         return entity.getId();
     }
 
