@@ -18,7 +18,7 @@ public class AiAnalysisController {
 
     @PostMapping("/analyze")
     public AiAnalysisResponse analyze(@RequestBody AiAnalysisRequest request) {
-        String result = aiAnalysisService.analyze(request.getContent());
+        String result = aiAnalysisService.analyze(request.getContent(), request.getImages());
         return AiAnalysisResponse.builder().result(result).build();
     }
 }
