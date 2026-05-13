@@ -3,6 +3,7 @@ package com.intelligenthealthcare.auth.infrastructure.web;
 import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
 import com.intelligenthealthcare.auth.infrastructure.jwt.JwtService;
 import com.intelligenthealthcare.patient.domain.model.Patient;
+import com.intelligenthealthcare.patient.domain.model.PatientRole;
 import com.intelligenthealthcare.patient.domain.repository.PatientRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -17,7 +18,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Collections;
 
 /**
  * 无状态 API：从 {@code Authorization: Bearer &lt;token&gt;} 解析患者 ID，再查库填充 {@code PatientAuthPrincipal}。
@@ -59,11 +60,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     /** 将当前患者写入 {@code SecurityContext}，供控制器通过 {@code @AuthenticationPrincipal} 取当前用户。 */
     private void setContext(Patient patient) {
-        var principal = new PatientAuthPrincipal(patient.getId(), patient.getPhone(), patient.getUsername());
+        PatientRole role = patient.getRole();
+        if (role == null) {
+            role = PatientRole.PATIENT;
+        }
+        String authority = "ROLE_" + role.name();
+        var principal = new PatientAuthPrincipal(patient.getId(), patient.getPhone(), patient.getUsername(), role);
         var auth = new UsernamePasswordAuthenticationToken(
                 principal,
                 null,
-                List.of(new SimpleGrantedAuthority("ROLE_PATIENT")));
+                Collections.singletonList(new SimpleGrantedAuthority(authority)));
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
 }

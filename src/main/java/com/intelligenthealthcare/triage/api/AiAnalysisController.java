@@ -1,8 +1,11 @@
 package com.intelligenthealthcare.triage.api;
 
+import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
 import com.intelligenthealthcare.triage.api.dto.AiAnalysisRequest;
 import com.intelligenthealthcare.triage.api.dto.AiAnalysisResponse;
 import com.intelligenthealthcare.triage.application.AiAnalysisService;
+import com.intelligenthealthcare.triage.application.dto.AiAnalyzeResult;
+import com.intelligenthealthcare.shared.security.CurrentPatient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,8 +20,17 @@ public class AiAnalysisController {
     private final AiAnalysisService aiAnalysisService;
 
     @PostMapping("/analyze")
-    public AiAnalysisResponse analyze(@RequestBody AiAnalysisRequest request) {
-        String result = aiAnalysisService.analyze(request.getContent(), request.getImages());
-        return AiAnalysisResponse.builder().result(result).build();
+    public AiAnalysisResponse analyze(
+            @CurrentPatient PatientAuthPrincipal principal,
+            @RequestBody AiAnalysisRequest request) {
+        AiAnalyzeResult result = aiAnalysisService.analyze(
+                principal,
+                request.getSessionId(),
+                request.getContent(),
+                request.getImages());
+        return AiAnalysisResponse.builder()
+                .sessionId(result.sessionId())
+                .result(result.result())
+                .build();
     }
 }

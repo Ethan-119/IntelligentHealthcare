@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-模块已完成领域模型 + 持久层，但 **上层全部缺失**，处于不可用状态。
+模块已接入 AI 分析调用链，可记录审计日志。
 
 ### 已实现
 
@@ -10,6 +10,10 @@
 |---|------|------|
 | Domain Model | `domain/model/AiRecallAuditLog.java` | AI 召回审计日志实体，映射 `ai_recall_audit_log` 表 |
 | Infrastructure | `infrastructure/persistence/AiRecallAuditLogMapper.java` | MyBatis-Plus BaseMapper，提供 CRUD |
+| Domain Repository | `domain/repository/AiRecallAuditLogRepository.java` | 审计日志领域仓储接口 |
+| Infrastructure Repository | `infrastructure/persistence/MybatisAiRecallAuditLogRepository.java` | 基于 Mapper 的仓储实现 |
+| Application Service | `application/AuditApplicationService.java` | 对外提供写审计日志能力 |
+| Business Integration | `triage/application/impl/AiAnalysisServiceImpl.java` | AI 分析成功/失败后落审计日志（失败不阻断主流程） |
 
 ### 只有空占位符
 

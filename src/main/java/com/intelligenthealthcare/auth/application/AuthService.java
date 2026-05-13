@@ -9,6 +9,7 @@ import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
 import com.intelligenthealthcare.auth.infrastructure.jwt.JwtService;
 import com.intelligenthealthcare.patient.domain.model.Gender;
 import com.intelligenthealthcare.patient.domain.model.Patient;
+import com.intelligenthealthcare.patient.domain.model.PatientRole;
 import com.intelligenthealthcare.patient.domain.model.TriagePrefer;
 import com.intelligenthealthcare.patient.domain.repository.PatientRepository;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -66,6 +67,7 @@ public class AuthService {
                 .username(trimToNull(request.getUsername()))
                 .password(passwordEncoder.encode(password))
                 .status(1)
+                .role(PatientRole.PATIENT)
                 .deleted(0)
                 .patientAge(request.getPatientAge())
                 .patientGender(patientGender)

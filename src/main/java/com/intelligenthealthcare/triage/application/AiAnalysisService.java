@@ -1,8 +1,10 @@
 package com.intelligenthealthcare.triage.application;
 
+import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
+import com.intelligenthealthcare.triage.application.dto.AiAnalyzeResult;
 import java.util.List;
 
 public interface AiAnalysisService {
 
-    String analyze(String content, List<String> images);
+    AiAnalyzeResult analyze(PatientAuthPrincipal principal, String sessionId, String content, List<String> images);
 }

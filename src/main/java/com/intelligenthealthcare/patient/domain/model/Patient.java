@@ -32,6 +32,9 @@ public class Patient {
     @Builder.Default
     private Integer status = 1;
 
+    @Builder.Default
+    private PatientRole role = PatientRole.PATIENT;
+
     // AI 导诊上下文
     private Integer patientAge;
 

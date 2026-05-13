@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS patient (
     username VARCHAR(64),
     password VARCHAR(128) NOT NULL,
     status SMALLINT DEFAULT 1,
+    role VARCHAR(16) DEFAULT 'patient',
     patient_age INT,
     patient_gender VARCHAR(16) DEFAULT 'unknown',
     resident_city VARCHAR(64),
@@ -14,6 +15,13 @@ CREATE TABLE IF NOT EXISTS patient (
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE IF EXISTS patient
+    ADD COLUMN IF NOT EXISTS role VARCHAR(16) DEFAULT 'patient';
+
+UPDATE patient
+SET role = 'patient'
+WHERE role IS NULL OR role = '';
 
 -- ========================== DISEASE MASTER
 CREATE TABLE IF NOT EXISTS disease_master (

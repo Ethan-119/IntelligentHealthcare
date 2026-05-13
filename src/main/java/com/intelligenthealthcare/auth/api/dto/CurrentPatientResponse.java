@@ -2,6 +2,7 @@ package com.intelligenthealthcare.auth.api.dto;
 
 import com.intelligenthealthcare.patient.domain.model.Gender;
 import com.intelligenthealthcare.patient.domain.model.Patient;
+import com.intelligenthealthcare.patient.domain.model.PatientRole;
 import com.intelligenthealthcare.patient.domain.model.TriagePrefer;
 import lombok.Builder;
 import lombok.Value;
@@ -16,6 +17,7 @@ public class CurrentPatientResponse {
     Long id;
     String username;
     Integer status;
+    PatientRole role;
     Integer patientAge;
     Gender patientGender;
     String residentCity;
@@ -27,6 +29,7 @@ public class CurrentPatientResponse {
                 .id(p.getId())
                 .username(p.getUsername())
                 .status(p.getStatus())
+                .role(p.getRole())
                 .patientAge(p.getPatientAge())
                 .patientGender(p.getPatientGender())
                 .residentCity(p.getResidentCity())

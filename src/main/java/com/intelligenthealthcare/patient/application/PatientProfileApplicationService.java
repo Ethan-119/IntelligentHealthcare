@@ -19,9 +19,7 @@ public class PatientProfileApplicationService {
 
     private final PatientRepository patientRepository;
 
-    /**
-     * 获取当前登录用户信息
-     */
+    /** 获取当前登录用户信息。 */
     public CurrentPatientResponse me(PatientAuthPrincipal principal) {
         Patient patient = patientRepository.findById(principal.getId()).orElse(null);
         if (patient == null) {
@@ -30,9 +28,7 @@ public class PatientProfileApplicationService {
         return CurrentPatientResponse.fromEntity(patient);
     }
 
-    /**
-     * 更新个人资料（导诊上下文 + 基础信息）
-     */
+    /** 更新个人资料（导诊上下文 + 基础信息）。 */
     @Transactional
     public CurrentPatientResponse updateMyProfile(
             PatientAuthPrincipal principal,

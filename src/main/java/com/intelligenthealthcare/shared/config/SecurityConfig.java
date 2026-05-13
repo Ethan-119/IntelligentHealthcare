@@ -47,15 +47,16 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 浏览器跨域预检
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // 首页、健康检查、注册与登录不校验 JWT；管理端 /api/admin/** 与其余 /api 同策略：需已认证
+                        // 首页、健康检查、注册与登录不校验 JWT
                         .requestMatchers(
                                 "/",
                                 "/index.html",
                                 "/api/health",
-                                "/api/auth/register",
-                                "/api/auth/login"
+                                "/api/auth/**"
                         )
                         .permitAll()
+                        // 管理端接口仅管理员可访问
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest()
                         .authenticated()
                 )
@@ -65,6 +66,7 @@ public class SecurityConfig {
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, ex) -> {
                             response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                            response.setCharacterEncoding("UTF-8");
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                             response.getWriter().write(
                                     objectMapper.writeValueAsString(

@@ -18,6 +18,7 @@ import com.intelligenthealthcare.importjob.domain.repository.KnowledgeImportRepo
 import com.intelligenthealthcare.importjob.domain.service.DiseaseAliasImportPolicy;
 import com.intelligenthealthcare.importjob.domain.service.DiseaseMasterImportPolicy;
 import com.intelligenthealthcare.importjob.infrastructure.file.ImportFileTableReader;
+import com.intelligenthealthcare.knowledge.application.KnowledgeQueryApplicationService;
 import com.intelligenthealthcare.knowledge.domain.model.DiseaseAlias;
 import com.intelligenthealthcare.knowledge.domain.model.DiseaseMaster;
 import java.io.IOException;
@@ -40,16 +41,19 @@ public class ImportJobApplicationService {
     private final ImportFailureLogRepository importFailureLogRepository;
     private final ImportReviewItemRepository importReviewItemRepository;
     private final KnowledgeImportRepository knowledgeImportRepository;
+    private final KnowledgeQueryApplicationService knowledgeQueryApplicationService;
 
     public ImportJobApplicationService(
             ImportJobRecordRepository importJobRecordRepository,
             ImportFailureLogRepository importFailureLogRepository,
             ImportReviewItemRepository importReviewItemRepository,
-            KnowledgeImportRepository knowledgeImportRepository) {
+            KnowledgeImportRepository knowledgeImportRepository,
+            KnowledgeQueryApplicationService knowledgeQueryApplicationService) {
         this.importJobRecordRepository = importJobRecordRepository;
         this.importFailureLogRepository = importFailureLogRepository;
         this.importReviewItemRepository = importReviewItemRepository;
         this.knowledgeImportRepository = knowledgeImportRepository;
+        this.knowledgeQueryApplicationService = knowledgeQueryApplicationService;
     }
 
     public ImportJobRecord createAndRunImport(MultipartFile file, String datasetTypeRaw) {
@@ -91,6 +95,10 @@ public class ImportJobApplicationService {
         }
 
         finishJobWithProgress(jobId, progress);
+        // 管理员导入写库成功后，按“先更新数据库、再删除缓存”策略失效知识库缓存。
+        if (progress.getSuccessCount() > 0) {
+            knowledgeQueryApplicationService.evictKnowledgeCaches();
+        }
         return mustGetJob(jobId);
     }
 

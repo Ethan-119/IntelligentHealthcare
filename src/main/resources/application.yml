@@ -29,7 +29,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/intelligent_healthcare?stringtype=unspecified
     username: postgres
-    password: postgres
+    password: 123456
     driver-class-name: org.postgresql.Driver
   data:
     redis:
@@ -37,8 +37,7 @@ spring:
       port: 6379
       password: 123456
       database: 1
-  # MongoDB：向量知识库存储
-  data:
+    # MongoDB：向量知识库存储
     mongodb:
       host: localhost
       port: 27017
@@ -74,3 +73,14 @@ app:
   # 与 MongoDB 向量索引维度保持一致
   rag:
     embedding-dimensions: 1024
+  agent:
+    react:
+      max-steps: 4
+      rag-top-k: 3
+      debug-trace: false
+  cache:
+    knowledge:
+      # 离峰自动刷新 cron：默认每 30 分钟执行一次（00:00-02:59）
+      offpeak-refresh-cron: "0 0/30 0-2 * * *"
+      # 时区，保证与业务时间一致
+      offpeak-refresh-zone: "Asia/Shanghai"

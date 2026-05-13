@@ -7,6 +7,7 @@ import lombok.Data;
 @Builder
 public class AiAnalysisResponse {
 
+    private String sessionId;
     private String result;
     private String imageAnalysis;
 }

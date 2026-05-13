@@ -7,6 +7,7 @@ import java.util.List;
 @Data
 public class AiAnalysisRequest {
 
+    private String sessionId;
     private String content;
     private List<String> images;
 }
