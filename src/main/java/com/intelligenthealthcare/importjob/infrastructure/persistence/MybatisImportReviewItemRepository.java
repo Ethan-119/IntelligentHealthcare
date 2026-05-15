@@ -5,16 +5,14 @@ import com.intelligenthealthcare.importjob.domain.model.ImportReviewItem;
 import com.intelligenthealthcare.importjob.domain.repository.ImportReviewItemRepository;
 import java.util.List;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class MybatisImportReviewItemRepository implements ImportReviewItemRepository {
 
     private final ImportReviewItemMapper importReviewItemMapper;
-
-    public MybatisImportReviewItemRepository(ImportReviewItemMapper importReviewItemMapper) {
-        this.importReviewItemMapper = importReviewItemMapper;
-    }
 
     @Override
     public void save(ImportReviewItem item) {

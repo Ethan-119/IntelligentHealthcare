@@ -1,10 +1,13 @@
 package com.intelligenthealthcare.importjob.domain.model;
 
 import com.intelligenthealthcare.importjob.domain.ImportJobStatuses;
+import lombok.Getter;
 
 /**
  * 单次导入在内存中累计的计数，由 {@link ImportLineProcessResult} 驱动更新。
+ * Lombok @Value 不适用：此类有 apply/toCompletion 等 mutation 方法。
  */
+@Getter
 public final class ImportJobProgress {
 
     private int successCount;

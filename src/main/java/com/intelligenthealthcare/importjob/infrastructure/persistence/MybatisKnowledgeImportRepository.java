@@ -6,19 +6,15 @@ import com.intelligenthealthcare.knowledge.domain.model.DiseaseAlias;
 import com.intelligenthealthcare.knowledge.domain.model.DiseaseMaster;
 import com.intelligenthealthcare.knowledge.infrastructure.persistence.DiseaseAliasMapper;
 import com.intelligenthealthcare.knowledge.infrastructure.persistence.DiseaseMasterMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class MybatisKnowledgeImportRepository implements KnowledgeImportRepository {
 
     private final DiseaseMasterMapper diseaseMasterMapper;
     private final DiseaseAliasMapper diseaseAliasMapper;
-
-    public MybatisKnowledgeImportRepository(
-            DiseaseMasterMapper diseaseMasterMapper, DiseaseAliasMapper diseaseAliasMapper) {
-        this.diseaseMasterMapper = diseaseMasterMapper;
-        this.diseaseAliasMapper = diseaseAliasMapper;
-    }
 
     @Override
     public DiseaseMaster findActiveDiseaseByCode(String diseaseCode) {

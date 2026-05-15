@@ -8,6 +8,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
+import lombok.RequiredArgsConstructor;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,17 +19,13 @@ import java.util.concurrent.TimeUnit;
  * 当前仅用于 /api/auth/me：在 JWT 已通过后，追加 Redis 会话一致性校验。
  */
 @Component
+@RequiredArgsConstructor
 public class CurrentPatientContextInterceptor implements HandlerInterceptor {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final StringRedisTemplate stringRedisTemplate;
     private final JwtProperties jwtProperties;
-
-    public CurrentPatientContextInterceptor(StringRedisTemplate stringRedisTemplate, JwtProperties jwtProperties) {
-        this.stringRedisTemplate = stringRedisTemplate;
-        this.jwtProperties = jwtProperties;
-    }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {

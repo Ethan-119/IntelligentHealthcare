@@ -6,70 +6,98 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
 import com.intelligenthealthcare.audit.application.AuditApplicationService;
+import com.intelligenthealthcare.mcp.ImageVisionTools;
+import com.intelligenthealthcare.mcp.MedicalDecisionTools;
 import com.intelligenthealthcare.patient.domain.model.Patient;
 import com.intelligenthealthcare.patient.domain.model.TriagePrefer;
 import com.intelligenthealthcare.patient.domain.repository.PatientRepository;
-import com.intelligenthealthcare.rag.application.RagQueryService;
-import com.intelligenthealthcare.rag.application.dto.RagSearchHitDto;
 import com.intelligenthealthcare.triage.application.AiAnalysisService;
 import com.intelligenthealthcare.triage.application.dto.AiAnalyzeResult;
+import com.intelligenthealthcare.triage.application.dto.AiSessionConversation;
+import com.intelligenthealthcare.triage.application.dto.AiSessionSummary;
+import com.intelligenthealthcare.triage.application.dto.AiSessionTurn;
 import com.intelligenthealthcare.triage.domain.model.TriageSession;
 import com.intelligenthealthcare.triage.domain.model.TriageSlotState;
 import com.intelligenthealthcare.triage.domain.model.TriageTurn;
-import com.intelligenthealthcare.triage.infrastructure.persistence.TriageSessionMapper;
-import com.intelligenthealthcare.triage.infrastructure.persistence.TriageSlotStateMapper;
-import com.intelligenthealthcare.triage.infrastructure.persistence.TriageTurnMapper;
+import com.intelligenthealthcare.triage.domain.repository.TriageSessionRepository;
+import com.intelligenthealthcare.triage.domain.repository.TriageSlotStateRepository;
+import com.intelligenthealthcare.triage.domain.repository.TriageTurnRepository;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
+/**
+ * AI 导诊编排服务：
+ * 1) 管理会话与轮次持久化；
+ * 2) 接入 MCP 图片分析结果；
+ * 3) 通过 ReAct 循环驱动工具调用（知识检索 / 医院推荐 / 急症预警 / 会话记忆 / 用户档案）并收敛最终答复。
+ */
 public class AiAnalysisServiceImpl implements AiAnalysisService {
 
     private static final int MAX_HISTORY_TURNS = 6;
     private static final int MAX_OBSERVATION_LENGTH = 1200;
+    private static final String NON_MEDICAL_REPLY =
+            "我当前仅支持医疗健康相关咨询，例如症状分析、就医建议、检查指标解读等。请描述您的健康问题，我会继续帮助您。";
+    private static final List<String> MEDICAL_KEYWORDS = List.of(
+            "症状", "发烧", "发热", "咳嗽", "头痛", "头晕", "腹痛", "腹泻", "呕吐", "恶心",
+            "胸闷", "胸痛", "心慌", "呼吸", "咽喉", "皮疹", "红肿", "疼痛", "出血", "感染",
+            "炎症", "血压", "血糖", "体温", "就医", "医院", "科室", "医生", "挂号", "急诊",
+            "药", "用药", "检查", "化验", "检验", "报告", "医疗", "健康", "护理", "康复",
+            "诊断", "治疗", "疾病", "病情");
 
     private final ChatClient chatClient;
-    private final RagQueryService ragQueryService;
     private final PatientRepository patientRepository;
     private final AuditApplicationService auditApplicationService;
-    private final TriageSessionMapper triageSessionMapper;
-    private final TriageTurnMapper triageTurnMapper;
-    private final TriageSlotStateMapper triageSlotStateMapper;
+    private final TriageSessionRepository triageSessionRepository;
+    private final TriageTurnRepository triageTurnRepository;
+    private final TriageSlotStateRepository triageSlotStateRepository;
     private final ObjectMapper objectMapper;
+    private final ImageVisionTools imageVisionTools;
+    private final MedicalDecisionTools medicalDecisionTools;
     private final int reactMaxSteps;
     private final int reactRagTopK;
     private final boolean reactDebugTrace;
+    private final int maxVisionImages;
 
+    // Lombok @RequiredArgsConstructor 不适用：需要在构造时调用 chatClientBuilder.build()
     public AiAnalysisServiceImpl(
             ChatClient.Builder chatClientBuilder,
-            RagQueryService ragQueryService,
             PatientRepository patientRepository,
             AuditApplicationService auditApplicationService,
-            TriageSessionMapper triageSessionMapper,
-            TriageTurnMapper triageTurnMapper,
-            TriageSlotStateMapper triageSlotStateMapper,
+            TriageSessionRepository triageSessionRepository,
+            TriageTurnRepository triageTurnRepository,
+            TriageSlotStateRepository triageSlotStateRepository,
             ObjectMapper objectMapper,
+            ImageVisionTools imageVisionTools,
+            MedicalDecisionTools medicalDecisionTools,
             @Value("${app.agent.react.max-steps:4}") int reactMaxSteps,
             @Value("${app.agent.react.rag-top-k:3}") int reactRagTopK,
-            @Value("${app.agent.react.debug-trace:false}") boolean reactDebugTrace) {
+            @Value("${app.agent.react.debug-trace:false}") boolean reactDebugTrace,
+            @Value("${app.vision.max-images:5}") int maxVisionImages) {
         this.chatClient = chatClientBuilder.build();
-        this.ragQueryService = ragQueryService;
         this.patientRepository = patientRepository;
         this.auditApplicationService = auditApplicationService;
-        this.triageSessionMapper = triageSessionMapper;
-        this.triageTurnMapper = triageTurnMapper;
-        this.triageSlotStateMapper = triageSlotStateMapper;
+        this.triageSessionRepository = triageSessionRepository;
+        this.triageTurnRepository = triageTurnRepository;
+        this.triageSlotStateRepository = triageSlotStateRepository;
         this.objectMapper = objectMapper;
+        this.imageVisionTools = imageVisionTools;
+        this.medicalDecisionTools = medicalDecisionTools;
         this.reactMaxSteps = reactMaxSteps;
         this.reactRagTopK = reactRagTopK;
         this.reactDebugTrace = reactDebugTrace;
+        this.maxVisionImages = maxVisionImages;
     }
 
     @Override
@@ -82,30 +110,37 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         if (!StringUtils.hasText(content)) {
             return new AiAnalyzeResult(resolveSessionId(sessionId), "输入内容为空，无法分析。");
         }
+        if (!isMedicalQuery(content)) {
+            return new AiAnalyzeResult(resolveSessionId(sessionId), NON_MEDICAL_REPLY, null);
+        }
 
         String resolvedSessionId = resolveSessionId(sessionId);
         String userId = principal.getId().toString();
         TriageSession triageSession = getOrCreateSession(userId, resolvedSessionId);
         int turnNo = nextTurnNo(triageSession.getAskRound());
         List<TriageTurn> historyTurns = listRecentTurns(resolvedSessionId);
-        boolean hasImages = images != null && !images.isEmpty();
+        List<String> safeImages = sanitizeImages(images);
+        boolean hasImages = !safeImages.isEmpty();
 
-        // TODO: MCP 集成 — 调用外部视觉服务分析图片，结果合并到最终输出
+        // MCP 集成：通过 MCP ImageVisionTools 调用 DashScope 多模态模型分析图片
+        String imageAnalysis = null;
         if (hasImages) {
-            // 后续通过 MCP 调用 DashScope 多模态 / 第三方医学影像服务
-            // String imageAnalysis = mcpVisionClient.analyze(images, context);
+            imageAnalysis = imageVisionTools.analyzeMedicalImages(
+                    safeImages, buildPatientProfileContext(principal) + "\n症状描述：" + content);
         }
 
         String normalizedContent = normalizeKey(content);
         try {
-            String result = runReActAnalysis(principal, resolvedSessionId, content, hasImages, historyTurns);
-            auditApplicationService.recordAiAnalyzeSuccess(content, images, result);
+            // ReAct 主循环：模型按 step 决策 action，直到 FINISH 或达到最大步数。
+            String result = runReActAnalysis(principal, resolvedSessionId, content,
+                    hasImages, imageAnalysis, historyTurns);
+            auditApplicationService.recordAiAnalyzeSuccess(content, safeImages, result);
             saveTurn(resolvedSessionId, turnNo, content, normalizedContent, result);
             updateSessionAfterTurn(triageSession, turnNo, 0, principal);
             upsertSlotState(resolvedSessionId, historyTurns, content);
-            return new AiAnalyzeResult(resolvedSessionId, result);
+            return new AiAnalyzeResult(resolvedSessionId, result, imageAnalysis);
         } catch (RuntimeException ex) {
-            auditApplicationService.recordAiAnalyzeFailed(content, images, ex.getMessage());
+            auditApplicationService.recordAiAnalyzeFailed(content, safeImages, ex.getMessage());
             saveTurn(
                     resolvedSessionId,
                     turnNo,
@@ -117,7 +152,48 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         }
     }
 
-    private String buildPrompt(String content, boolean hasImages, List<TriageTurn> historyTurns) {
+    @Override
+    @Transactional(readOnly = true)
+    public List<AiSessionSummary> listMySessions(PatientAuthPrincipal principal) {
+        List<TriageSession> sessions = triageSessionRepository.findByUserId(principal.getId().toString(), 50);
+        List<AiSessionSummary> result = new ArrayList<>(sessions.size());
+        for (int i = 0; i < sessions.size(); i++) {
+            TriageSession session = sessions.get(i);
+            String title = buildSessionTitle(session.getSessionId());
+            result.add(new AiSessionSummary(
+                    session.getSessionId(),
+                    title,
+                    session.getAskRound(),
+                    session.getUpdateTime()));
+        }
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AiSessionConversation getSessionConversation(PatientAuthPrincipal principal, String sessionId) {
+        if (!StringUtils.hasText(sessionId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sessionId 不能为空");
+        }
+        TriageSession session = triageSessionRepository.findBySessionId(sessionId.trim()).orElse(null);
+        if (session == null || !principal.getId().toString().equals(session.getUserId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "会话不存在");
+        }
+        List<TriageTurn> turns = triageTurnRepository.findAllBySessionId(sessionId.trim());
+        List<AiSessionTurn> items = new ArrayList<>(turns.size());
+        for (int i = 0; i < turns.size(); i++) {
+            TriageTurn turn = turns.get(i);
+            items.add(new AiSessionTurn(
+                    turn.getTurnNo(),
+                    turn.getUserMessage(),
+                    turn.getReplyText(),
+                    turn.getCreateTime()));
+        }
+        items.sort(Comparator.comparing(AiSessionTurn::turnNo));
+        return new AiSessionConversation(sessionId.trim(), items);
+    }
+
+    private String buildPrompt(String content, boolean hasImages, String imageAnalysis, List<TriageTurn> historyTurns) {
         StringBuilder sb = new StringBuilder();
         if (!historyTurns.isEmpty()) {
             sb.append("以下是本次会话的历史上下文，请结合上下文保持连续性：\n");
@@ -135,8 +211,11 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                 3. 建议下一步检查方向
                 4. 说明这不是最终临床诊断
                 """);
-        if (hasImages) {
-            sb.append("5. 用户已上传图片，图片分析结果将由外部视觉服务补充，请结合文本描述给出初步分析\n");
+        if (hasImages && imageAnalysis != null && !imageAnalysis.isBlank()) {
+            sb.append("5. 以下为 MCP 视觉服务对用户上传图片的分析结果，请结合此结果给出综合建议：\n");
+            sb.append("```\n").append(imageAnalysis).append("\n```\n");
+        } else if (hasImages) {
+            sb.append("5. 用户已上传图片（图片分析待完成），请结合文本描述给出初步分析\n");
         }
         sb.append("\n待分析内容：\n").append(content);
         return sb.toString();
@@ -147,19 +226,22 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             String sessionId,
             String content,
             boolean hasImages,
+            String imageAnalysis,
             List<TriageTurn> historyTurns) {
         StringBuilder scratchpad = new StringBuilder();
         for (int step = 1; step <= reactMaxSteps; step++) {
             ReActDecision decision = planNextAction(
-                    principal, sessionId, content, hasImages, historyTurns, scratchpad, step);
+                    principal, sessionId, content, hasImages, imageAnalysis, historyTurns, scratchpad, step);
             String action = normalizeAction(decision.action());
             if ("FINISH".equals(action)) {
-                return finalizeAnswer(content, hasImages, historyTurns, scratchpad, decision.finalAnswer());
+                return finalizeAnswer(content, hasImages, imageAnalysis, historyTurns, scratchpad, decision.finalAnswer());
             }
+            // 非 FINISH 动作先执行并记录 Observation，再进入下一轮决策。
             String observation = executeAction(action, decision.actionInput(), principal, sessionId, content, historyTurns);
             appendScratchpad(scratchpad, step, decision, observation);
         }
-        return finalizeAnswer(content, hasImages, historyTurns, scratchpad, "");
+        // 到达最大步数仍未 FINISH 时，强制收敛生成最终回答，避免无限推理。
+        return finalizeAnswer(content, hasImages, imageAnalysis, historyTurns, scratchpad, "");
     }
 
     private ReActDecision planNextAction(
@@ -167,10 +249,12 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             String sessionId,
             String content,
             boolean hasImages,
+            String imageAnalysis,
             List<TriageTurn> historyTurns,
             StringBuilder scratchpad,
             int stepNo) {
-        String plannerPrompt = buildReActPlannerPrompt(principal, sessionId, content, hasImages, historyTurns, scratchpad, stepNo);
+        String plannerPrompt = buildReActPlannerPrompt(principal, sessionId, content,
+                hasImages, imageAnalysis, historyTurns, scratchpad, stepNo);
         String raw = chatClient.prompt(plannerPrompt).call().content();
         return parseDecision(raw, content);
     }
@@ -180,6 +264,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             String sessionId,
             String content,
             boolean hasImages,
+            String imageAnalysis,
             List<TriageTurn> historyTurns,
             StringBuilder scratchpad,
             int stepNo) {
@@ -189,19 +274,25 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                 你每一步只能返回一个 JSON（不要 markdown 代码块，不要额外文本）：
                 {
                   "thought": "本步简短思考",
-                  "action": "RAG_SEARCH|SESSION_MEMORY|PATIENT_PROFILE|FINISH",
+                  "action": "SEARCH_MEDICAL_KNOWLEDGE|RECOMMEND_HOSPITAL|LOG_EMERGENCY|SESSION_MEMORY|PATIENT_PROFILE|FINISH",
                   "actionInput": "动作输入，可为空字符串",
                   "finalAnswer": "仅当 action=FINISH 时填写，其他时候留空"
                 }
                 规则：
-                1) 若信息不足，优先用 RAG_SEARCH 或 SESSION_MEMORY。
-                2) 最多几步后必须 FINISH，给出结构化医疗建议并提示“非临床诊断”。
-                3) 不要编造检查结果，不要输出危言耸听结论。
+                1) 若信息不足，优先用 SEARCH_MEDICAL_KNOWLEDGE 或 SESSION_MEMORY。
+                2) 若用户要求就近就医推荐，优先用 RECOMMEND_HOSPITAL。
+                3) 若识别为疑似急症，先执行 LOG_EMERGENCY 后再给建议。
+                4) 最多几步后必须 FINISH，给出结构化医疗建议并提示"非临床诊断"。
+                5) 不要编造检查结果，不要输出危言耸听结论。
                 """);
         sb.append("\n当前步数：").append(stepNo).append("/").append(reactMaxSteps).append("\n");
         sb.append("患者信息：").append(buildPatientProfileContext(principal)).append("\n");
         sb.append("会话ID：").append(sessionId).append("\n");
         sb.append("是否含图片：").append(hasImages ? "是" : "否").append("\n");
+        if (imageAnalysis != null && !imageAnalysis.isBlank()) {
+            sb.append("MCP 图片视觉分析结果：\n```\n")
+                    .append(imageAnalysis).append("\n```\n");
+        }
         if (!historyTurns.isEmpty()) {
             sb.append("历史对话：\n");
             for (int i = 0; i < historyTurns.size(); i++) {
@@ -228,6 +319,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             String finalAnswer = textOrDefault(node.get("finalAnswer"), "");
             return new ReActDecision(thought, action, actionInput, finalAnswer);
         } catch (JsonProcessingException ex) {
+            // 模型偶发返回非 JSON 时兜底为 FINISH，避免整条链路失败。
             return new ReActDecision("模型输出无法解析，直接收敛给出答复", "FINISH", fallbackInput, cleaned);
         }
     }
@@ -242,6 +334,15 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         if ("RAG_SEARCH".equals(action)) {
             return observeRag(actionInput, latestContent);
         }
+        if ("SEARCH_MEDICAL_KNOWLEDGE".equals(action)) {
+            return observeRag(actionInput, latestContent);
+        }
+        if ("RECOMMEND_HOSPITAL".equals(action)) {
+            return observeHospitalRecommendation(principal, actionInput, latestContent);
+        }
+        if ("LOG_EMERGENCY".equals(action)) {
+            return observeEmergencyLogging(principal, sessionId, latestContent, actionInput);
+        }
         if ("SESSION_MEMORY".equals(action)) {
             return observeSessionMemory(sessionId, historyTurns, latestContent);
         }
@@ -253,25 +354,38 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
 
     private String observeRag(String actionInput, String latestContent) {
         String query = StringUtils.hasText(actionInput) ? actionInput.trim() : latestContent.trim();
-        List<RagSearchHitDto> hits = ragQueryService.search(query, reactRagTopK);
-        if (hits.isEmpty()) {
-            return "RAG 检索无匹配知识，请基于通用临床安全原则继续。";
-        }
-        StringBuilder sb = new StringBuilder("RAG 命中：");
-        for (int i = 0; i < hits.size(); i++) {
-            RagSearchHitDto hit = hits.get(i);
-            sb.append("\n- [").append(i + 1).append("] ")
-                    .append(defaultText(hit.content()))
-                    .append(" (source=").append(defaultText(hit.sourceType()))
-                    .append(", score=").append(hit.distance()).append(")");
-        }
-        return truncateObservation(sb.toString());
+        String toolResult = medicalDecisionTools.searchMedicalKnowledge(query, reactRagTopK);
+        return truncateObservation(toolResult);
+    }
+
+    private String observeHospitalRecommendation(
+            PatientAuthPrincipal principal,
+            String actionInput,
+            String latestContent) {
+        Patient patient = patientRepository.findById(principal.getId()).orElse(null);
+        String city = patient == null ? "" : patient.getResidentCity();
+        String area = patient == null ? "" : patient.getArea();
+        String symptomSummary = StringUtils.hasText(actionInput) ? actionInput.trim() : latestContent.trim();
+        String toolResult = medicalDecisionTools.recommendHospital(city, area, symptomSummary);
+        return truncateObservation(toolResult);
+    }
+
+    private String observeEmergencyLogging(
+            PatientAuthPrincipal principal,
+            String sessionId,
+            String latestContent,
+            String actionInput) {
+        String reason = StringUtils.hasText(actionInput) ? actionInput.trim() : "模型判定疑似急症";
+        String toolResult = medicalDecisionTools.logEmergency(
+                latestContent,
+                reason,
+                sessionId,
+                principal.getId().toString());
+        return truncateObservation(toolResult);
     }
 
     private String observeSessionMemory(String sessionId, List<TriageTurn> historyTurns, String latestContent) {
-        LambdaQueryWrapper<TriageSlotState> query = new LambdaQueryWrapper<>();
-        query.eq(TriageSlotState::getSessionId, sessionId);
-        TriageSlotState slotState = triageSlotStateMapper.selectOne(query);
+        TriageSlotState slotState = triageSlotStateRepository.findBySessionId(sessionId).orElse(null);
         StringBuilder sb = new StringBuilder();
         sb.append("会话近历史轮数=").append(historyTurns.size());
         sb.append("；最新输入=").append(latestContent.trim());
@@ -314,9 +428,28 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         return value.trim();
     }
 
+    private String buildSessionTitle(String sessionId) {
+        List<TriageTurn> turns = triageTurnRepository.findAllBySessionId(sessionId);
+        if (turns.isEmpty()) {
+            return "新会话";
+        }
+        for (int i = 0; i < turns.size(); i++) {
+            String userText = turns.get(i).getUserMessage();
+            if (StringUtils.hasText(userText)) {
+                String trimmed = userText.trim();
+                if (trimmed.length() <= 24) {
+                    return trimmed;
+                }
+                return trimmed.substring(0, 24) + "...";
+            }
+        }
+        return "新会话";
+    }
+
     private String finalizeAnswer(
             String content,
             boolean hasImages,
+            String imageAnalysis,
             List<TriageTurn> historyTurns,
             StringBuilder scratchpad,
             String draftAnswer) {
@@ -326,14 +459,14 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             }
             return draftAnswer.trim();
         }
-        String finalPrompt = buildPrompt(content, hasImages, historyTurns)
+        String finalPrompt = buildPrompt(content, hasImages, imageAnalysis, historyTurns)
                 + "\n\n以下是 ReAct 过程中的关键信息，请据此给出最终答复：\n"
                 + scratchpad
                 + "\n\n输出要求：\n"
                 + "1. 关键信息提取\n"
                 + "2. 初步风险提示\n"
                 + "3. 建议下一步检查方向\n"
-                + "4. 明确声明“这不是最终临床诊断”。\n";
+                + "4. 明确声明\u201c这不是最终临床诊断\u201d。\n";
         String answer = chatClient.prompt(finalPrompt).call().content();
         if (!reactDebugTrace) {
             return answer;
@@ -354,11 +487,17 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             return "FINISH";
         }
         String normalized = action.trim().toUpperCase();
-        if ("RAG_SEARCH".equals(normalized)
+        if ("SEARCH_MEDICAL_KNOWLEDGE".equals(normalized)
+                || "RECOMMEND_HOSPITAL".equals(normalized)
+                || "LOG_EMERGENCY".equals(normalized)
                 || "SESSION_MEMORY".equals(normalized)
                 || "PATIENT_PROFILE".equals(normalized)
                 || "FINISH".equals(normalized)) {
             return normalized;
+        }
+        if ("RAG_SEARCH".equals(normalized)
+                || "SEARCH_KNOWLEDGE".equals(normalized)) {
+            return "SEARCH_MEDICAL_KNOWLEDGE";
         }
         return "FINISH";
     }
@@ -400,11 +539,46 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         return value.trim();
     }
 
+    private boolean isMedicalQuery(String content) {
+        if (isClearlyMedicalByKeywords(content)) {
+            return true;
+        }
+        return isMedicalByModel(content);
+    }
+
+    private boolean isClearlyMedicalByKeywords(String content) {
+        String normalized = content == null ? "" : content.toLowerCase(Locale.ROOT);
+        for (int i = 0; i < MEDICAL_KEYWORDS.size(); i++) {
+            if (normalized.contains(MEDICAL_KEYWORDS.get(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isMedicalByModel(String content) {
+        String classifyPrompt = """
+                请判断用户输入是否属于医疗健康咨询。
+                只允许输出 YES 或 NO，不要输出其它内容。
+                YES：与症状、疾病、就医、检查、药物、护理、健康风险相关。
+                NO：与医疗健康无关（如编程、娱乐、政治、购物、旅行等）。
+                用户输入：
+                """ + content;
+        try {
+            String result = chatClient.prompt(classifyPrompt).call().content();
+            if (!StringUtils.hasText(result)) {
+                return true;
+            }
+            String normalized = result.trim().toUpperCase(Locale.ROOT);
+            return normalized.startsWith("YES");
+        } catch (RuntimeException ex) {
+            // 分类失败时保守放行，避免误伤真实医疗问题。
+            return true;
+        }
+    }
+
     private TriageSession getOrCreateSession(String userId, String sessionId) {
-        LambdaQueryWrapper<TriageSession> query = new LambdaQueryWrapper<>();
-        query.eq(TriageSession::getUserId, userId);
-        query.eq(TriageSession::getSessionId, sessionId);
-        TriageSession existing = triageSessionMapper.selectOne(query);
+        TriageSession existing = triageSessionRepository.findByUserIdAndSessionId(userId, sessionId).orElse(null);
         if (existing != null) {
             return existing;
         }
@@ -417,24 +591,12 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                 .askRound(0)
                 .invalidAnswerCount(0)
                 .build();
-        triageSessionMapper.insert(created);
+        triageSessionRepository.save(created);
         return created;
     }
 
     private List<TriageTurn> listRecentTurns(String sessionId) {
-        LambdaQueryWrapper<TriageTurn> query = new LambdaQueryWrapper<>();
-        query.eq(TriageTurn::getSessionId, sessionId);
-        query.orderByDesc(TriageTurn::getTurnNo);
-        query.last("LIMIT " + MAX_HISTORY_TURNS);
-        List<TriageTurn> desc = triageTurnMapper.selectList(query);
-        if (desc.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<TriageTurn> asc = new ArrayList<>(desc.size());
-        for (int i = desc.size() - 1; i >= 0; i--) {
-            asc.add(desc.get(i));
-        }
-        return asc;
+        return triageTurnRepository.findRecentBySessionId(sessionId, MAX_HISTORY_TURNS);
     }
 
     private void saveTurn(
@@ -452,7 +614,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                 .stage("analysis")
                 .replyText(reply)
                 .build();
-        triageTurnMapper.insert(turn);
+        triageTurnRepository.save(turn);
     }
 
     private void updateSessionAfterTurn(
@@ -469,7 +631,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         triageSession.setCurrentStage("analysis");
         triageSession.setStatus("active");
         fillSessionProfileFromPatient(triageSession, principal);
-        triageSessionMapper.updateById(triageSession);
+        triageSessionRepository.updateById(triageSession);
     }
 
     private void fillSessionProfileFromPatient(TriageSession triageSession, PatientAuthPrincipal principal) {
@@ -477,6 +639,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         if (patient == null) {
             return;
         }
+        // 会话快照同步用户档案，便于后续“就近推荐”直接读取 triage_session。
         triageSession.setCity(trimToNull(patient.getResidentCity()));
         triageSession.setArea(trimToNull(patient.getArea()));
         triageSession.setPatientAge(patient.getPatientAge());
@@ -498,19 +661,17 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         symptoms.add(latestContent.trim());
         String symptomsJson = toJson(symptoms);
 
-        LambdaQueryWrapper<TriageSlotState> query = new LambdaQueryWrapper<>();
-        query.eq(TriageSlotState::getSessionId, sessionId);
-        TriageSlotState existing = triageSlotStateMapper.selectOne(query);
+        TriageSlotState existing = triageSlotStateRepository.findBySessionId(sessionId).orElse(null);
         if (existing == null) {
             TriageSlotState created = TriageSlotState.builder()
                     .sessionId(sessionId)
                     .symptomsJson(symptomsJson)
                     .build();
-            triageSlotStateMapper.insert(created);
+            triageSlotStateRepository.save(created);
             return;
         }
         existing.setSymptomsJson(symptomsJson);
-        triageSlotStateMapper.updateById(existing);
+        triageSlotStateRepository.updateById(existing);
     }
 
     private String toJson(List<String> values) {
@@ -533,6 +694,27 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             return null;
         }
         return value.trim();
+    }
+
+    private List<String> sanitizeImages(List<String> images) {
+        if (images == null || images.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> result = new ArrayList<>();
+        int limit = Math.max(maxVisionImages, 1);
+        for (int i = 0; i < images.size(); i++) {
+            String raw = images.get(i);
+            if (!StringUtils.hasText(raw)) {
+                continue;
+            }
+            // 前端上传的是 data URL / base64 文本，这里只做清洗与限流，不做解码。
+            result.add(raw.trim());
+            // 与 app.vision.max-images 对齐，避免单次请求携带过多图片拖慢视觉分析。
+            if (result.size() >= limit) {
+                break;
+            }
+        }
+        return result;
     }
 
     private String resolveSessionId(String sessionId) {

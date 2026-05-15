@@ -6,6 +6,7 @@ import com.intelligenthealthcare.patient.api.dto.UpdateMyProfileRequest;
 import com.intelligenthealthcare.patient.application.PatientProfileApplicationService;
 import com.intelligenthealthcare.shared.security.CurrentPatient;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -16,13 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/patient/me")
+@RequiredArgsConstructor
 public class PatientProfileController {
 
     private final PatientProfileApplicationService patientProfileApplicationService;
-
-    public PatientProfileController(PatientProfileApplicationService patientProfileApplicationService) {
-        this.patientProfileApplicationService = patientProfileApplicationService;
-    }
 
     @GetMapping
     public CurrentPatientResponse me(@CurrentPatient PatientAuthPrincipal principal) {

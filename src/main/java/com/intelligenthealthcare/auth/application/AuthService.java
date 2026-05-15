@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
+import lombok.RequiredArgsConstructor;
 
 import java.util.concurrent.TimeUnit;
 
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit;
  * 患者注册/登录与当前用户信息；密码仅经 {@link org.springframework.security.crypto.password.PasswordEncoder} 单向存储。
  */
 @Service
+@RequiredArgsConstructor
 public class AuthService {
 
     private final PatientRepository patientRepository;
@@ -33,19 +35,6 @@ public class AuthService {
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
     private final StringRedisTemplate stringRedisTemplate;
-
-    public AuthService(
-            PatientRepository patientRepository,
-            PasswordEncoder passwordEncoder,
-            JwtService jwtService,
-            JwtProperties jwtProperties,
-            StringRedisTemplate stringRedisTemplate) {
-        this.patientRepository = patientRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
-        this.jwtProperties = jwtProperties;
-        this.stringRedisTemplate = stringRedisTemplate;
-    }
 
     /** 注册新用户：校验手机号唯一，初始化导诊上下文并签发 JWT。 */
     @Transactional
@@ -94,7 +83,8 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }
 
-        if (!Integer.valueOf(1).equals(patient.getStatus()) || Integer.valueOf(1).equals(patient.getDeleted())) {
+        if (!Integer.valueOf(1).equals(patient.getStatus())
+                || (patient.getDeleted() != null && Integer.valueOf(1).equals(patient.getDeleted()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "账号已禁用");
         }
         if (patient.getPassword() == null || !passwordEncoder.matches(request.getPassword(), patient.getPassword())) {

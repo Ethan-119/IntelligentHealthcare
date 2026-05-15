@@ -24,6 +24,15 @@ spring:
         options:
           model: text-embedding-v3
           dimensions: 1024
+    # MCP 服务器配置：为 ChatClient 提供图片分析等工具能力
+    mcp:
+      server:
+        name: intelligent-healthcare-mcp
+        version: 1.0.0
+        type: SYNC
+        sse:
+          endpoint: /api/mcp/sse
+          message-timeout: 60s
   # 主业务库：PostgreSQL（用户/会话/导入任务/日志等结构化数据）
   # 知识库与向量检索：MongoDB（当前口径）；历史 pgvector 配置仅保留兼容，不再作为主路径
   datasource:
@@ -78,6 +87,12 @@ app:
       max-steps: 4
       rag-top-k: 3
       debug-trace: false
+  # MCP 图片视觉分析配置：使用 DashScope 多模态模型
+  vision:
+    enabled: true
+    model: qwen-vl-plus
+    max-images: 5
+    analysis-timeout-ms: 30000
   cache:
     knowledge:
       # 离峰自动刷新 cron：默认每 30 分钟执行一次（00:00-02:59）

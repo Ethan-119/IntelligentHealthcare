@@ -2,7 +2,7 @@ package com.intelligenthealthcare.rag.application;
 
 import com.intelligenthealthcare.rag.config.RagProperties;
 import com.intelligenthealthcare.rag.domain.model.RagDocumentChunk;
-import com.intelligenthealthcare.rag.infrastructure.persistence.MongoRagDocumentRepository;
+import com.intelligenthealthcare.rag.domain.repository.RagDocumentRepository;
 import java.util.List;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 将可检索文本写入 MongoDB {@link RagDocumentChunk}，经 {@link EmbeddingModel} 生成向量。
+ * 写入策略：先持久化向量文档，再同步写入 Redis 热缓存，供查询侧优先命中。
  */
 @Service
 public class RagIngestionService {
@@ -26,17 +27,18 @@ public class RagIngestionService {
     private static final long HOT_CHUNK_TTL_MINUTES = 60L;
 
     private final EmbeddingModel embeddingModel;
-    private final MongoRagDocumentRepository mongoRagDocumentRepository;
+    private final RagDocumentRepository ragDocumentRepository;
     private final RagProperties ragProperties;
     private final RedissonClient redissonClient;
 
+    // Lombok @RequiredArgsConstructor 不适用：embeddingModel 需要 @Qualifier 限定
     public RagIngestionService(
             @Qualifier("openAiEmbeddingModel") EmbeddingModel embeddingModel,
-            MongoRagDocumentRepository mongoRagDocumentRepository,
+            RagDocumentRepository ragDocumentRepository,
             RagProperties ragProperties,
             RedissonClient redissonClient) {
         this.embeddingModel = embeddingModel;
-        this.mongoRagDocumentRepository = mongoRagDocumentRepository;
+        this.ragDocumentRepository = ragDocumentRepository;
         this.ragProperties = ragProperties;
         this.redissonClient = redissonClient;
     }
@@ -50,15 +52,16 @@ public class RagIngestionService {
                     "嵌入维数 " + vector.length + " 与 app.rag.embedding-dimensions="
                             + ragProperties.getEmbeddingDimensions() + " 不一致");
         }
-        Optional<RagDocumentChunk> existing = mongoRagDocumentRepository
+        Optional<RagDocumentChunk> existing = ragDocumentRepository
                 .findBySourceTypeAndSourceIdAndChunkKey(
                         command.sourceType(), command.sourceId().trim(), chunkKey);
         RagDocumentChunk entity;
         if (existing.isPresent()) {
+            // 幂等更新：同 sourceType/sourceId/chunkKey 视为同一文本块，更新而不是新增。
             entity = existing.get();
             entity.setContent(command.content());
             entity.setEmbedding(vector);
-            mongoRagDocumentRepository.update(entity);
+            ragDocumentRepository.update(entity);
             writeHotChunkCache(entity);
             return entity.getId();
         }
@@ -69,7 +72,7 @@ public class RagIngestionService {
                 .content(command.content())
                 .embedding(vector)
                 .build();
-        mongoRagDocumentRepository.insert(entity);
+        ragDocumentRepository.insert(entity);
         writeHotChunkCache(entity);
         return entity.getId();
     }
@@ -82,6 +85,7 @@ public class RagIngestionService {
     private void writeHotChunkCache(RagDocumentChunk chunk) {
         String cacheKey = buildChunkCacheKey(chunk);
         RMapCache<String, RagDocumentChunk> cache = redissonClient.getMapCache(HOT_CHUNK_CACHE);
+        // 热缓存与查询侧 TTL 对齐，保证近期高频文档优先命中。
         cache.put(cacheKey, chunk, HOT_CHUNK_TTL_MINUTES, TimeUnit.MINUTES);
     }
 

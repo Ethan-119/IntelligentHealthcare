@@ -4,16 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.intelligenthealthcare.importjob.domain.model.ImportFailureLog;
 import com.intelligenthealthcare.importjob.domain.repository.ImportFailureLogRepository;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class MybatisImportFailureLogRepository implements ImportFailureLogRepository {
 
     private final ImportFailureLogMapper importFailureLogMapper;
-
-    public MybatisImportFailureLogRepository(ImportFailureLogMapper importFailureLogMapper) {
-        this.importFailureLogMapper = importFailureLogMapper;
-    }
 
     @Override
     public void save(ImportFailureLog log) {

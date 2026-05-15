@@ -20,6 +20,8 @@ import org.springframework.util.StringUtils;
 /**
  * 查询向量：对问题做嵌入后执行近邻检索。
  * 当前口径为 MongoDB 向量检索；本实现为历史 PostgreSQL/pgvector 兼容链路。
+ * <p>
+ * 查询策略：优先读 Redis 热缓存（低延迟），未命中再回落到向量库检索。
  */
 @Service
 public class RagQueryService {
@@ -31,6 +33,7 @@ public class RagQueryService {
     private final RagProperties ragProperties;
     private final RedissonClient redissonClient;
 
+    // Lombok @RequiredArgsConstructor 不适用：embeddingModel 需要 @Qualifier 限定
     public RagQueryService(
             @Qualifier("openAiEmbeddingModel") EmbeddingModel embeddingModel,
             RagVectorSearchRepository vectorSearchRepository,
@@ -53,8 +56,10 @@ public class RagQueryService {
         }
         List<RagSearchHitDto> hotCacheHits = searchFromHotCache(q, topK);
         if (!hotCacheHits.isEmpty()) {
+            // 热缓存命中时直接返回，避免每次都访问向量库。
             return hotCacheHits;
         }
+        // 缓存未命中时回落到向量库（Mongo）近邻检索。
         return vectorSearchRepository.findNearestL2(q, topK);
     }
 
@@ -75,6 +80,7 @@ public class RagQueryService {
             RagDocumentChunk chunk = chunks.get(i);
             float[] embedding = chunk.getEmbedding();
             if (embedding == null || embedding.length != queryEmbedding.length) {
+                // 向量维度不一致的脏数据直接跳过，避免污染排序结果。
                 continue;
             }
             double distance = l2Distance(queryEmbedding, embedding);
@@ -109,6 +115,7 @@ public class RagQueryService {
     }
 
     private static double l2Distance(float[] a, float[] b) {
+        // 与向量库检索口径保持一致：使用 L2 距离，值越小语义越接近。
         double sum = 0.0D;
         for (int i = 0; i < a.length; i++) {
             double diff = a[i] - b[i];

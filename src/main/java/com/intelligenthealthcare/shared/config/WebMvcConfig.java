@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 
@@ -14,17 +15,11 @@ import java.util.List;
  * 业务异常到 HTTP 的映射由 {@link com.intelligenthealthcare.shared.api.GlobalExceptionHandler} 统一处理。
  */
 @Configuration
+@RequiredArgsConstructor
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private final CurrentPatientArgumentResolver currentPatientArgumentResolver;
     private final CurrentPatientContextInterceptor currentPatientContextInterceptor;
-
-    public WebMvcConfig(
-            CurrentPatientArgumentResolver currentPatientArgumentResolver,
-            CurrentPatientContextInterceptor currentPatientContextInterceptor) {
-        this.currentPatientArgumentResolver = currentPatientArgumentResolver;
-        this.currentPatientContextInterceptor = currentPatientContextInterceptor;
-    }
 
     @Override
     // 注册自定义参数解析器，让控制器可直接使用 @CurrentPatient 注入当前登录用户

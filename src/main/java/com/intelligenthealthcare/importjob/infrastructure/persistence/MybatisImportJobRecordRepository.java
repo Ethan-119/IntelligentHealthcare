@@ -7,16 +7,14 @@ import com.intelligenthealthcare.importjob.domain.model.ImportJobRecord;
 import com.intelligenthealthcare.importjob.domain.repository.ImportJobRecordRepository;
 import java.util.List;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class MybatisImportJobRecordRepository implements ImportJobRecordRepository {
 
     private final ImportJobRecordMapper importJobRecordMapper;
-
-    public MybatisImportJobRecordRepository(ImportJobRecordMapper importJobRecordMapper) {
-        this.importJobRecordMapper = importJobRecordMapper;
-    }
 
     @Override
     public void insert(ImportJobRecord job) {

@@ -26,25 +26,39 @@ AiAnalysisController.analyze()
     ▼
 AiAnalysisServiceImpl.analyze(content, images)
     │
-    ├── 纯文本 → ChatClient.prompt(prompt).call() → 返回结构化分析
+    ├── 含图片 → MCP ImageVisionTools.analyzeMedicalImages()
+    │            → DashScope qwen-vl-plus 多模态模型分析图片
+    │            → 图片分析结果注入 ReAct 上下文
     │
-    └── 含图片 → [MCP 集成预留] → 外部视觉服务分析图片
-                 → ChatClient 综合文本 + 图片分析结果 → 返回综合诊断
+    └── ReAct 分析 → ChatClient ReAct 循环（RAG/记忆/患者档案）
+                     → 综合文本 + 图片分析 → 返回结构化诊断
 ```
 
-## MCP 集成预留
+## MCP 集成（已实现）
 
-当用户症状描述模糊时，系统可引导用户上传图片（症状照片、检查报告等）。本模块本身不具备视觉分析能力，通过 MCP 协议调用外部服务：
+当用户症状描述模糊时，系统可引导用户上传图片（症状照片、检查报告等）。本模块通过 MCP (Model Context Protocol) 调用外部视觉服务：
 
-- **入口**：`AiAnalysisServiceImpl.analyze()` 中 `hasImages` 分支
-- **职责**：将 base64 图片通过 MCP 转发给外部视觉服务（如 DashScope 多模态、第三方医学影像服务）
-- **结果**：外部返回的图片分析结果与 ChatClient 文本分析合并，构成最终 `AiAnalysisResponse`
+- **MCP Server**：`ImageVisionTools` 通过 `@Tool` 注解暴露 `analyzeMedicalImages` 工具
+- **MCP Client**：Spring AI MCP Client 自动发现并注册工具回调
+- **入口**：`AiAnalysisServiceImpl.analyze()` 中 `hasImages` 分支，直接调用 `ImageVisionTools`
+- **视觉模型**：DashScope 多模态模型 `qwen-vl-plus`（通过 `app.vision.model` 配置）
+- **结果**：图片分析结果合并到 ReAct 规划提示词中，同时通过 `AiAnalysisResponse.imageAnalysis` 字段独立返回
 
-MCP 在本系统中的角色是**能力边界的扩展层**——当本地 ChatClient 仅处理文本时，MCP 作为桥梁连接外部专业能力。
+MCP 在本系统中的角色是**能力边界的扩展层**——当本地 ChatClient 仅处理文本时，MCP 作为桥梁连接外部专业视觉能力。
 
-## 领域模型
+## 与其它模块的协作
 
-### TriageSession（导诊会话）
+- **mcp**：通过 MCP 协议调用 `ImageVisionTools` 获取图片视觉分析结果
+- **rag**：AI 分析可结合 RAG 向量检索结果增强诊断建议。
+- **knowledge**：疾病、医院、科室、医生等基础数据供分析结果引用。
+- **audit**：AI 召回/分析结果可落审计日志（`AiRecallAuditLog`）。
+- **auth**：用户会话通过 JWT 身份关联。
+
+## 配置要点
+
+- AI 模型配置见 `application.yml` 中 `spring.ai.openai` 段（当前对接 DashScope 兼容模式，文本模型 `qwen-plus`）。
+- 图片视觉模型配置见 `app.vision.*` 段（模型 `qwen-vl-plus`，最大图片数 5 张）。
+- MCP Server 配置见 `spring.ai.mcp.server` 段，SSE 端点 `/api/mcp/sse`。
 一次完整的导诊对话，记录用户 ID、当前阶段、询问轮次、患者年龄/性别、严重程度、推荐路径等。
 
 ### TriageSlotState（槽位状态）

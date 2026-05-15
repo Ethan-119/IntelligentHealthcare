@@ -22,7 +22,7 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
+    public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException ex) {
         StringBuilder sb = new StringBuilder();
         var fieldErrors = ex.getBindingResult().getFieldErrors();
         for (int i = 0; i < fieldErrors.size(); i++) {

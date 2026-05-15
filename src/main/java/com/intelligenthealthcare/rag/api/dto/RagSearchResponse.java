@@ -1,20 +1,17 @@
 package com.intelligenthealthcare.rag.api.dto;
 
 import java.util.List;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.Builder;
+import lombok.Value;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
+@Value
+@Builder
 public class RagSearchResponse {
 
     private List<RagSearchItem> items;
 
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
+    @Value
+    @Builder
     public static class RagSearchItem {
         private String id;
         private String sourceType;

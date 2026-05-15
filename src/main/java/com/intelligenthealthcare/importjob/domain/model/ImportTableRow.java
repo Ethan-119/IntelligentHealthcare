@@ -1,27 +1,16 @@
 package com.intelligenthealthcare.importjob.domain.model;
 
 import java.util.Map;
+import lombok.Value;
 
 /**
  * 从 Excel/CSV 解析出的一行：文件行号 + 小写列名到单元格文本。
  */
-public final class ImportTableRow {
+@Value
+public class ImportTableRow {
 
-    private final int fileLineNumber;
-    private final Map<String, String> values;
-
-    public ImportTableRow(int fileLineNumber, Map<String, String> values) {
-        this.fileLineNumber = fileLineNumber;
-        this.values = values;
-    }
-
-    public int getFileLineNumber() {
-        return fileLineNumber;
-    }
-
-    public Map<String, String> getValues() {
-        return values;
-    }
+    int fileLineNumber;
+    Map<String, String> values;
 
     /**
      * 用于失败日志、待审核项中的原文快照。

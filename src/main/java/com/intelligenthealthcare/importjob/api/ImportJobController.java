@@ -9,6 +9,7 @@ import com.intelligenthealthcare.importjob.domain.model.ImportJobRecord;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,13 +31,10 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequestMapping("/api/admin/import/jobs")
+@RequiredArgsConstructor
 public class ImportJobController {
 
     private final ImportJobApplicationService importJobApplicationService;
-
-    public ImportJobController(ImportJobApplicationService importJobApplicationService) {
-        this.importJobApplicationService = importJobApplicationService;
-    }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ImportJobResponse upload(

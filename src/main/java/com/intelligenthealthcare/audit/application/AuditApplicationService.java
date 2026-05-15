@@ -40,6 +40,15 @@ public class AuditApplicationService {
         saveQuietly(entity);
     }
 
+    public void recordEmergencyAlert(String symptomSummary, String reason) {
+        AiRecallAuditLog entity = AiRecallAuditLog.builder()
+                .symptoms(trimText(symptomSummary))
+                .status("EMERGENCY_ALERT")
+                .message(trimText(reason))
+                .build();
+        saveQuietly(entity);
+    }
+
     private void saveQuietly(AiRecallAuditLog entity) {
         try {
             aiRecallAuditLogRepository.save(entity);

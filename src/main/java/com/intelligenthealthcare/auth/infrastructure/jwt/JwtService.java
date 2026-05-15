@@ -18,6 +18,7 @@ public class JwtService {
     private final SecretKey key;
     private final long expirationMs;
 
+    // Lombok @RequiredArgsConstructor 不适用：需要从配置中调用 Keys.hmacShaKeyFor() 派生密钥
     public JwtService(JwtProperties properties) {
         this.key = Keys.hmacShaKeyFor(properties.secret().getBytes(StandardCharsets.UTF_8));
         this.expirationMs = properties.expirationMs();

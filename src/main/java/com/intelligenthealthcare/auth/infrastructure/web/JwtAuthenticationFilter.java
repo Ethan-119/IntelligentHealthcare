@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import lombok.RequiredArgsConstructor;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -25,17 +26,13 @@ import java.util.Collections;
  * 解析失败不中断请求链，由 {@link com.intelligenthealthcare.shared.config.SecurityConfig} 的鉴权规则决定 401/放行。
  */
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
     private final PatientRepository patientRepository;
-
-    public JwtAuthenticationFilter(JwtService jwtService, PatientRepository patientRepository) {
-        this.jwtService = jwtService;
-        this.patientRepository = patientRepository;
-    }
 
     @Override
     protected void doFilterInternal(
@@ -65,7 +62,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             role = PatientRole.PATIENT;
         }
         String authority = "ROLE_" + role.name();
-        var principal = new PatientAuthPrincipal(patient.getId(), patient.getPhone(), patient.getUsername(), role);
+        var principal = PatientAuthPrincipal.builder()
+                .id(patient.getId())
+                .phone(patient.getPhone())
+                .username(patient.getUsername())
+                .role(role)
+                .build();
         var auth = new UsernamePasswordAuthenticationToken(
                 principal,
                 null,

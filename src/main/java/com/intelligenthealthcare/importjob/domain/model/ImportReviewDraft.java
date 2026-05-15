@@ -2,10 +2,13 @@ package com.intelligenthealthcare.importjob.domain.model;
 
 import com.intelligenthealthcare.importjob.domain.DatasetTypes;
 import com.intelligenthealthcare.importjob.domain.ReviewIssueTypes;
+import lombok.Getter;
 
 /**
  * 待人工审核的草稿，可转为 {@link ImportReviewItem} 持久化。
+ * Lombok @AllArgsConstructor / @Value 不适用：构造器中有 truncateMessage 截断逻辑。
  */
+@Getter
 public final class ImportReviewDraft {
 
     private final String datasetType;
@@ -14,6 +17,7 @@ public final class ImportReviewDraft {
     private final String rawContent;
     private final String suggestion;
 
+    // Lombok @AllArgsConstructor 不适用：构造器中需要调用 ImportTextLimits.truncateMessage
     public ImportReviewDraft(
             String datasetType, String itemKey, String issueType, String rawContent, String suggestion) {
         this.datasetType = datasetType;

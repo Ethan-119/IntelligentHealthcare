@@ -1,12 +1,10 @@
 package com.intelligenthealthcare.rag.api.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.Builder;
+import lombok.Value;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
+@Value
+@Builder
 public class RagIngestResponse {
 
     private String id;

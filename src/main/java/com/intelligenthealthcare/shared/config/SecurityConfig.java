@@ -50,7 +50,6 @@ public class SecurityConfig {
                         // 首页、健康检查、注册与登录不校验 JWT
                         .requestMatchers(
                                 "/",
-                                "/index.html",
                                 "/api/health",
                                 "/api/auth/**"
                         )

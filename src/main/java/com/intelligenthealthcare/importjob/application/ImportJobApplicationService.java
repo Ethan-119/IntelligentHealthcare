@@ -27,12 +27,14 @@ import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import lombok.RequiredArgsConstructor;
 
 /**
  * 应用服务（Application Service）：DDD 中负责**用例编排**与事务边界，不包含领域业务规则。
  * 规则在 {@link com.intelligenthealthcare.importjob.domain.service} 等处；持久化仅通过 {@link com.intelligenthealthcare.importjob.domain.repository}。
  */
 @Service
+@RequiredArgsConstructor
 public class ImportJobApplicationService {
 
     private static final int MAX_JOB_LIST = 200;
@@ -42,19 +44,6 @@ public class ImportJobApplicationService {
     private final ImportReviewItemRepository importReviewItemRepository;
     private final KnowledgeImportRepository knowledgeImportRepository;
     private final KnowledgeQueryApplicationService knowledgeQueryApplicationService;
-
-    public ImportJobApplicationService(
-            ImportJobRecordRepository importJobRecordRepository,
-            ImportFailureLogRepository importFailureLogRepository,
-            ImportReviewItemRepository importReviewItemRepository,
-            KnowledgeImportRepository knowledgeImportRepository,
-            KnowledgeQueryApplicationService knowledgeQueryApplicationService) {
-        this.importJobRecordRepository = importJobRecordRepository;
-        this.importFailureLogRepository = importFailureLogRepository;
-        this.importReviewItemRepository = importReviewItemRepository;
-        this.knowledgeImportRepository = knowledgeImportRepository;
-        this.knowledgeQueryApplicationService = knowledgeQueryApplicationService;
-    }
 
     public ImportJobRecord createAndRunImport(MultipartFile file, String datasetTypeRaw) {
         if (!StringUtils.hasText(datasetTypeRaw)) {
