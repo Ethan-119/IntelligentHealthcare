@@ -5,18 +5,21 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
 public class HealthController {
 
+    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+
     @GetMapping("/health")
     public Map<String, Object> health() {
         return Map.of(
                 "status", "UP",
                 "service", "intelligent-healthcare",
-                "timestamp", LocalDateTime.now().toString()
+                "timestamp", LocalDateTime.now(ZONE).toString()
         );
     }
 }

@@ -35,12 +35,12 @@ public class ImportFailureLog {
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
-    /** 领域侧工厂：行级错误写入失日志。 */
+    /** 领域侧工厂：行级错误写入失败日志。rawContent 也做截断，防止超大行撑爆 DB 列。 */
     public static ImportFailureLog fromLineError(long jobId, int fileLineNumber, String rawContent, String errorMessage) {
         return ImportFailureLog.builder()
                 .jobId(jobId)
                 .rowNumber(fileLineNumber)
-                .rawContent(rawContent)
+                .rawContent(ImportTextLimits.truncateMessage(rawContent, ImportTextLimits.RAW_CONTENT))
                 .errorMessage(ImportTextLimits.truncateMessage(errorMessage, ImportTextLimits.ERROR_MESSAGE))
                 .build();
     }

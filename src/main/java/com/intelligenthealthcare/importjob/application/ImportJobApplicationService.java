@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +46,9 @@ public class ImportJobApplicationService {
     private final KnowledgeImportRepository knowledgeImportRepository;
     private final KnowledgeQueryApplicationService knowledgeQueryApplicationService;
 
+    // 单次导入作为一个事务：要么全部完成（job + failure logs + review items + 进度更新），
+    // 要么整体回滚，避免中途崩溃留下半截脏数据。
+    @Transactional
     public ImportJobRecord createAndRunImport(MultipartFile file, String datasetTypeRaw) {
         if (!StringUtils.hasText(datasetTypeRaw)) {
             throw new IllegalArgumentException("datasetType 不能为空");

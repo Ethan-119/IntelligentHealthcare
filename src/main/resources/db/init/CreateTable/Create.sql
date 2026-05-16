@@ -28,12 +28,10 @@ CREATE TABLE IF NOT EXISTS disease_master (
     id BIGSERIAL PRIMARY KEY,
     disease_code VARCHAR(64) NOT NULL UNIQUE,
     disease_name VARCHAR(255) NOT NULL,
-    aliases_json TEXT,
     symptom_keywords TEXT,
     gender_rule VARCHAR(32) DEFAULT 'all',
     age_min INT,
     age_max INT,
-    age_group VARCHAR(32),
     urgency_level VARCHAR(32) DEFAULT 'medium',
     review_status VARCHAR(32) DEFAULT 'approved',
     deleted SMALLINT DEFAULT 0,
@@ -116,9 +114,6 @@ CREATE TABLE IF NOT EXISTS hospital_department (
     crowd_tags_json TEXT,
     standard_dept_code VARCHAR(64),
     subspecialty_code VARCHAR(64),
-    district_name VARCHAR(64),
-    latitude DECIMAL(10,6),
-    longitude DECIMAL(10,6),
     is_emergency SMALLINT DEFAULT 0,
     national_key_score DECIMAL(10,2) DEFAULT 0,
     provincial_key_score DECIMAL(10,2) DEFAULT 0,
@@ -168,7 +163,6 @@ CREATE TABLE IF NOT EXISTS import_failure_log (
 CREATE TABLE IF NOT EXISTS import_review_item (
     id BIGSERIAL PRIMARY KEY,
     job_id BIGINT NOT NULL,
-    dataset_type VARCHAR(64),
     item_key VARCHAR(128),
     issue_type VARCHAR(128),
     raw_content TEXT,
@@ -178,6 +172,18 @@ CREATE TABLE IF NOT EXISTS import_review_item (
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE IF EXISTS disease_master
+    DROP COLUMN IF EXISTS aliases_json,
+    DROP COLUMN IF EXISTS age_group;
+
+ALTER TABLE IF EXISTS import_review_item
+    DROP COLUMN IF EXISTS dataset_type;
+
+ALTER TABLE IF EXISTS hospital_department
+    DROP COLUMN IF EXISTS district_name,
+    DROP COLUMN IF EXISTS latitude,
+    DROP COLUMN IF EXISTS longitude;
 
 -- ========================== DOCTOR PROFILE
 CREATE TABLE IF NOT EXISTS doctor_profile (

@@ -3,21 +3,17 @@ package com.intelligenthealthcare.rag.application;
 import com.intelligenthealthcare.rag.config.RagProperties;
 import com.intelligenthealthcare.rag.domain.model.RagDocumentChunk;
 import com.intelligenthealthcare.rag.domain.repository.RagDocumentRepository;
+import com.intelligenthealthcare.rag.infrastructure.embedding.EmbeddingUtil;
 import java.util.List;
-import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.embedding.EmbeddingRequest;
-import org.springframework.ai.embedding.EmbeddingResponse;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.redisson.api.RMapCache;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 将可检索文本写入 MongoDB {@link RagDocumentChunk}，经 {@link EmbeddingModel} 生成向量。
+ * 将可检索文本写入 MongoDB {@link RagDocumentChunk}，经 {@link EmbeddingUtil} 生成向量。
  * 写入策略：先持久化向量文档，再同步写入 Redis 热缓存，供查询侧优先命中。
  */
 @Service
@@ -26,27 +22,27 @@ public class RagIngestionService {
     private static final String HOT_CHUNK_CACHE = "knowledge:rag:hotChunk";
     private static final long HOT_CHUNK_TTL_MINUTES = 60L;
 
-    private final EmbeddingModel embeddingModel;
+    private final EmbeddingUtil embeddingUtil;
     private final RagDocumentRepository ragDocumentRepository;
     private final RagProperties ragProperties;
     private final RedissonClient redissonClient;
 
-    // Lombok @RequiredArgsConstructor 不适用：embeddingModel 需要 @Qualifier 限定
     public RagIngestionService(
-            @Qualifier("openAiEmbeddingModel") EmbeddingModel embeddingModel,
+            EmbeddingUtil embeddingUtil,
             RagDocumentRepository ragDocumentRepository,
             RagProperties ragProperties,
             RedissonClient redissonClient) {
-        this.embeddingModel = embeddingModel;
+        this.embeddingUtil = embeddingUtil;
         this.ragDocumentRepository = ragDocumentRepository;
         this.ragProperties = ragProperties;
         this.redissonClient = redissonClient;
     }
 
-    @Transactional
+    // 不使用 @Transactional：Spring 事务管理器仅覆盖 JDBC，MongoDB 操作不参与。
+    // 若 Redis 缓存写入失败而 MongoDB 已写入，不一致需由上层补偿逻辑处理。
     public String upsert(RagIngestCommand command) {
         String chunkKey = StringUtils.hasText(command.chunkKey()) ? command.chunkKey().trim() : "default";
-        float[] vector = embed(command.content());
+        float[] vector = embeddingUtil.embed(command.content());
         if (vector.length != ragProperties.getEmbeddingDimensions()) {
             throw new IllegalStateException(
                     "嵌入维数 " + vector.length + " 与 app.rag.embedding-dimensions="
@@ -75,11 +71,6 @@ public class RagIngestionService {
         ragDocumentRepository.insert(entity);
         writeHotChunkCache(entity);
         return entity.getId();
-    }
-
-    private float[] embed(String text) {
-        EmbeddingResponse response = embeddingModel.call(new EmbeddingRequest(List.of(text), null));
-        return response.getResult().getOutput();
     }
 
     private void writeHotChunkCache(RagDocumentChunk chunk) {

@@ -27,9 +27,6 @@ public class DiseaseMaster {
     @TableField("disease_name")
     private String diseaseName;
 
-    @TableField("aliases_json")
-    private String aliasesJson;
-
     @TableField("symptom_keywords")
     private String symptomKeywords;
 
@@ -41,9 +38,6 @@ public class DiseaseMaster {
 
     @TableField("age_max")
     private Integer ageMax;
-
-    @TableField("age_group")
-    private String ageGroup;
 
     @TableField("urgency_level")
     private String urgencyLevel;

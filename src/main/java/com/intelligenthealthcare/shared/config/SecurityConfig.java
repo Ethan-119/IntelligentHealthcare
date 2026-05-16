@@ -2,8 +2,10 @@ package com.intelligenthealthcare.shared.config;
 
 import com.intelligenthealthcare.auth.infrastructure.web.JwtAuthenticationFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -18,6 +20,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -75,11 +78,29 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** 开发期放宽来源；生产建议改为明确前端域名，并按需打开 credentials。 */
+    // 开发/测试 profile 允许所有来源；生产 profile 仅允许配置的前端域名。
+    private final Environment environment;
+
+    @Value("${app.cors.allowed-origins:http://localhost:5173}")
+    private String allowedOrigins;
+
+    public SecurityConfig(Environment environment) {
+        this.environment = environment;
+    }
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        boolean isDev = Arrays.asList(environment.getActiveProfiles()).contains("dev");
         CorsConfiguration c = new CorsConfiguration();
-        c.setAllowedOriginPatterns(List.of("*"));
+        if (isDev) {
+            c.setAllowedOriginPatterns(List.of("*"));
+        } else {
+            c.setAllowedOriginPatterns(
+                    Arrays.stream(allowedOrigins.split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .toList());
+        }
         c.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         c.setAllowedHeaders(List.of("*"));
         c.setExposedHeaders(List.of("Authorization"));

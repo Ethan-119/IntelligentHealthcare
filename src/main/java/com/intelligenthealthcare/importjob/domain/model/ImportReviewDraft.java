@@ -1,6 +1,5 @@
 package com.intelligenthealthcare.importjob.domain.model;
 
-import com.intelligenthealthcare.importjob.domain.DatasetTypes;
 import com.intelligenthealthcare.importjob.domain.ReviewIssueTypes;
 import lombok.Getter;
 
@@ -11,7 +10,6 @@ import lombok.Getter;
 @Getter
 public final class ImportReviewDraft {
 
-    private final String datasetType;
     private final String itemKey;
     private final String issueType;
     private final String rawContent;
@@ -19,8 +17,7 @@ public final class ImportReviewDraft {
 
     // Lombok @AllArgsConstructor 不适用：构造器中需要调用 ImportTextLimits.truncateMessage
     public ImportReviewDraft(
-            String datasetType, String itemKey, String issueType, String rawContent, String suggestion) {
-        this.datasetType = datasetType;
+            String itemKey, String issueType, String rawContent, String suggestion) {
         this.itemKey = itemKey;
         this.issueType = issueType;
         this.rawContent = rawContent;
@@ -29,15 +26,10 @@ public final class ImportReviewDraft {
 
     public static ImportReviewDraft duplicateDiseaseCode(String code, String rawLine) {
         return new ImportReviewDraft(
-                DatasetTypes.DISEASE_MASTER,
                 code,
                 ReviewIssueTypes.DUPLICATE_DISEASE_CODE,
                 rawLine,
                 "已存在同编码(" + code + ")的疾病，但名称与库中不一致，请人工处理。");
-    }
-
-    public String getDatasetType() {
-        return datasetType;
     }
 
     public String getItemKey() {

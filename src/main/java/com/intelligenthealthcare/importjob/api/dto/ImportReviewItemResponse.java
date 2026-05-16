@@ -12,7 +12,6 @@ import lombok.Value;
 public class ImportReviewItemResponse {
     long id;
     long jobId;
-    String datasetType;
     String itemKey;
     String issueType;
     String rawContent;
@@ -29,7 +28,6 @@ public class ImportReviewItemResponse {
         return ImportReviewItemResponse.builder()
                 .id(e.getId())
                 .jobId(e.getJobId())
-                .datasetType(e.getDatasetType())
                 .itemKey(e.getItemKey())
                 .issueType(e.getIssueType())
                 .rawContent(e.getRawContent())

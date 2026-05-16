@@ -181,6 +181,11 @@ public final class ImportFileTableReader {
         if (s == null) {
             return "";
         }
-        return s.trim().toLowerCase(Locale.ROOT);
+        String trimmed = s.trim();
+        // 剥离 Windows UTF-8 BOM（\uFEFF），避免首列列名匹配失败。
+        if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
+            trimmed = trimmed.substring(1);
+        }
+        return trimmed.toLowerCase(Locale.ROOT);
     }
 }

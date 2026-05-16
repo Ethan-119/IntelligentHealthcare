@@ -23,9 +23,6 @@ public class ImportReviewItem {
     @TableField("job_id")
     private Long jobId;
 
-    @TableField("dataset_type")
-    private String datasetType;
-
     @TableField("item_key")
     private String itemKey;
 
@@ -53,7 +50,6 @@ public class ImportReviewItem {
         }
         return ImportReviewItem.builder()
                 .jobId(jobId)
-                .datasetType(draft.getDatasetType())
                 .itemKey(draft.getItemKey())
                 .issueType(draft.getIssueType())
                 .rawContent(draft.getRawContent())

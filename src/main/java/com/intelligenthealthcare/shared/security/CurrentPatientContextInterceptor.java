@@ -1,74 +1,39 @@
 package com.intelligenthealthcare.shared.security;
 
 import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
-import com.intelligenthealthcare.auth.config.JwtProperties;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 import lombok.RequiredArgsConstructor;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.util.concurrent.TimeUnit;
 
 /**
- * 将当前请求中的认证患者写入线程上下文，供参数解析器统一读取。
- * 当前仅用于 /api/auth/me：在 JWT 已通过后，追加 Redis 会话一致性校验。
+ * 将 Spring Security 认证上下文中的 {@link PatientAuthPrincipal} 写入线程局部变量，
+ * 供 {@link CurrentPatientArgumentResolver} 在控制器方法参数注入时读取。
+ * <p>
+ * Redis token 有效性校验已前置到 {@code JwtAuthenticationFilter}，本拦截器不复核。
  */
 @Component
 @RequiredArgsConstructor
 public class CurrentPatientContextInterceptor implements HandlerInterceptor {
 
-    private static final String BEARER_PREFIX = "Bearer ";
-
-    private final StringRedisTemplate stringRedisTemplate;
-    private final JwtProperties jwtProperties;
-
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        // 第一步：先取出 Spring Security 已解析的登录用户
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof PatientAuthPrincipal principal) {
-            // 第二步：取请求头中的 Bearer token
-            String requestToken = extractBearerToken(request);
-            // 第三步：按用户 ID 从 Redis 取服务端保存的 token
-            String tokenKey = buildTokenKey(principal.getId());
-            String cachedToken = stringRedisTemplate.opsForValue().get(tokenKey);
-            // 第四步：只有 Redis 与请求 token 一致时才写入线程上下文，并刷新 TTL
-            if (StringUtils.hasText(requestToken)
-                    && StringUtils.hasText(cachedToken)
-                    && requestToken.equals(cachedToken)) {
-                CurrentPatientContext.set(principal);
-                // 每次校验通过后刷新 Redis 中 token 的 TTL，实现"活跃期间自动续期"
-                stringRedisTemplate.expire(tokenKey, jwtProperties.expirationMs(), TimeUnit.MILLISECONDS);
-                return true;
-            }
+            CurrentPatientContext.set(principal);
+            return true;
         }
-        // 不在这里拦截，交给登录拦截器处理
         CurrentPatientContext.clear();
         return true;
-   }
+    }
 
     @Override
     public void afterCompletion(
             HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
-        // 请求结束统一清理，避免线程复用导致脏数据
         CurrentPatientContext.clear();
-    }
-
-    private static String extractBearerToken(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-        if (!StringUtils.hasText(header) || !header.startsWith(BEARER_PREFIX)) {
-            return null;
-        }
-        String raw = header.substring(BEARER_PREFIX.length()).trim();
-        return StringUtils.hasText(raw) ? raw : null;
-    }
-
-    private static String buildTokenKey(Long patientId) {
-        return "auth:token:patient:" + patientId;
     }
 }

@@ -24,8 +24,8 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 管理端知识库导入：需登录。上传 Excel/CSV 第一行为表头。
  *
- * <p>DISEASE_MASTER 列名示例：disease_code, disease_name, symptom_keywords, gender_rule, age_min, age_max, age_group,
- * urgency_level, review_status, aliases_json
+ * <p>DISEASE_MASTER 列名示例：disease_code, disease_name, symptom_keywords, gender_rule, age_min, age_max, urgency_level,
+ * review_status
  *
  * <p>DISEASE_ALIAS 列名示例：disease_code, alias_name, alias_type, source
  */

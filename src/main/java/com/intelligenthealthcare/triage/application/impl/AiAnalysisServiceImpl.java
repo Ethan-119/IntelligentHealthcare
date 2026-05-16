@@ -1,11 +1,12 @@
 package com.intelligenthealthcare.triage.application.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
 import com.intelligenthealthcare.audit.application.AuditApplicationService;
+import com.intelligenthealthcare.knowledge.domain.model.Hospital;
+import com.intelligenthealthcare.knowledge.domain.repository.HospitalRepository;
 import com.intelligenthealthcare.mcp.ImageVisionTools;
 import com.intelligenthealthcare.mcp.MedicalDecisionTools;
 import com.intelligenthealthcare.patient.domain.model.Patient;
@@ -22,11 +23,15 @@ import com.intelligenthealthcare.triage.domain.model.TriageTurn;
 import com.intelligenthealthcare.triage.domain.repository.TriageSessionRepository;
 import com.intelligenthealthcare.triage.domain.repository.TriageSlotStateRepository;
 import com.intelligenthealthcare.triage.domain.repository.TriageTurnRepository;
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.chat.client.ChatClient;
@@ -35,6 +40,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
+import org.redisson.api.RBucket;
+import org.redisson.api.RedissonClient;
 
 @Service
 /**
@@ -46,6 +53,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class AiAnalysisServiceImpl implements AiAnalysisService {
 
     private static final int MAX_HISTORY_TURNS = 6;
+    private static final long SESSION_CACHE_TTL_MINUTES = 20L;
+    private static final String SESSION_HISTORY_CACHE_PREFIX = "ai:session:history:";
     private static final int MAX_OBSERVATION_LENGTH = 1200;
     private static final String NON_MEDICAL_REPLY =
             "我当前仅支持医疗健康相关咨询，例如症状分析、就医建议、检查指标解读等。请描述您的健康问题，我会继续帮助您。";
@@ -59,12 +68,14 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     private final ChatClient chatClient;
     private final PatientRepository patientRepository;
     private final AuditApplicationService auditApplicationService;
+    private final HospitalRepository hospitalRepository;
     private final TriageSessionRepository triageSessionRepository;
     private final TriageTurnRepository triageTurnRepository;
     private final TriageSlotStateRepository triageSlotStateRepository;
     private final ObjectMapper objectMapper;
     private final ImageVisionTools imageVisionTools;
     private final MedicalDecisionTools medicalDecisionTools;
+    private final RedissonClient redissonClient;
     private final int reactMaxSteps;
     private final int reactRagTopK;
     private final boolean reactDebugTrace;
@@ -75,12 +86,14 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             ChatClient.Builder chatClientBuilder,
             PatientRepository patientRepository,
             AuditApplicationService auditApplicationService,
+            HospitalRepository hospitalRepository,
             TriageSessionRepository triageSessionRepository,
             TriageTurnRepository triageTurnRepository,
             TriageSlotStateRepository triageSlotStateRepository,
             ObjectMapper objectMapper,
             ImageVisionTools imageVisionTools,
             MedicalDecisionTools medicalDecisionTools,
+            RedissonClient redissonClient,
             @Value("${app.agent.react.max-steps:4}") int reactMaxSteps,
             @Value("${app.agent.react.rag-top-k:3}") int reactRagTopK,
             @Value("${app.agent.react.debug-trace:false}") boolean reactDebugTrace,
@@ -88,25 +101,31 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         this.chatClient = chatClientBuilder.build();
         this.patientRepository = patientRepository;
         this.auditApplicationService = auditApplicationService;
+        this.hospitalRepository = hospitalRepository;
         this.triageSessionRepository = triageSessionRepository;
         this.triageTurnRepository = triageTurnRepository;
         this.triageSlotStateRepository = triageSlotStateRepository;
         this.objectMapper = objectMapper;
         this.imageVisionTools = imageVisionTools;
         this.medicalDecisionTools = medicalDecisionTools;
+        this.redissonClient = redissonClient;
         this.reactMaxSteps = reactMaxSteps;
         this.reactRagTopK = reactRagTopK;
         this.reactDebugTrace = reactDebugTrace;
         this.maxVisionImages = maxVisionImages;
     }
 
+    // 不使用 @Transactional：方法内包含外部 AI 调用（ChatClient / MCP 视觉分析），
+    // 可能耗时数十秒；每个 DB 写操作（saveTurn / updateSessionAfterTurn / audit log）均为独立自动提交，
+    // 异常时已写入的错误记录不会被回滚，确保故障可追溯。
     @Override
-    @Transactional
     public AiAnalyzeResult analyze(
             PatientAuthPrincipal principal,
             String sessionId,
             String content,
-            List<String> images) {
+            List<String> images,
+            Double latitude,
+            Double longitude) {
         if (!StringUtils.hasText(content)) {
             return new AiAnalyzeResult(resolveSessionId(sessionId), "输入内容为空，无法分析。");
         }
@@ -117,6 +136,8 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         String resolvedSessionId = resolveSessionId(sessionId);
         String userId = principal.getId().toString();
         TriageSession triageSession = getOrCreateSession(userId, resolvedSessionId);
+        applyUserLocation(triageSession, latitude, longitude);
+        Patient currentPatient = patientRepository.findById(principal.getId()).orElse(null);
         int turnNo = nextTurnNo(triageSession.getAskRound());
         List<TriageTurn> historyTurns = listRecentTurns(resolvedSessionId);
         List<String> safeImages = sanitizeImages(images);
@@ -132,22 +153,32 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         String normalizedContent = normalizeKey(content);
         try {
             // ReAct 主循环：模型按 step 决策 action，直到 FINISH 或达到最大步数。
-            String result = runReActAnalysis(principal, resolvedSessionId, content,
+            ReActResult reactResult = runReActAnalysis(principal, resolvedSessionId, content,
                     hasImages, imageAnalysis, historyTurns);
-            auditApplicationService.recordAiAnalyzeSuccess(content, safeImages, result);
-            saveTurn(resolvedSessionId, turnNo, content, normalizedContent, result);
-            updateSessionAfterTurn(triageSession, turnNo, 0, principal);
+            String result = reactResult.finalAnswer();
+            String rawDecisionJson = buildTurnDecisionJson(
+                    content, normalizedContent, safeImages, imageAnalysis, reactResult.trace(), "SUCCESS", null);
+            auditApplicationService.recordAiAnalyzeSuccess(
+                    content, safeImages, result, currentPatient, resolvedSessionId);
+            saveTurn(resolvedSessionId, turnNo, content, normalizedContent, result, rawDecisionJson);
+            updateSessionAfterTurn(triageSession, turnNo, 0, principal, result);
             upsertSlotState(resolvedSessionId, historyTurns, content);
             return new AiAnalyzeResult(resolvedSessionId, result, imageAnalysis);
         } catch (RuntimeException ex) {
-            auditApplicationService.recordAiAnalyzeFailed(content, safeImages, ex.getMessage());
+            String errorText = ex.getMessage() == null ? "未知错误" : ex.getMessage();
+            String failedReply = "分析失败：" + errorText;
+            String rawDecisionJson = buildTurnDecisionJson(
+                    content, normalizedContent, safeImages, imageAnalysis, "", "FAILED", errorText);
+            auditApplicationService.recordAiAnalyzeFailed(
+                    content, safeImages, ex.getMessage(), currentPatient, resolvedSessionId);
             saveTurn(
                     resolvedSessionId,
                     turnNo,
                     content,
                     normalizedContent,
-                    "分析失败：" + (ex.getMessage() == null ? "未知错误" : ex.getMessage()));
-            updateSessionAfterTurn(triageSession, turnNo, 1, principal);
+                    failedReply,
+                    rawDecisionJson);
+            updateSessionAfterTurn(triageSession, turnNo, 1, principal, failedReply);
             throw ex;
         }
     }
@@ -221,7 +252,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         return sb.toString();
     }
 
-    private String runReActAnalysis(
+    private ReActResult runReActAnalysis(
             PatientAuthPrincipal principal,
             String sessionId,
             String content,
@@ -234,14 +265,24 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                     principal, sessionId, content, hasImages, imageAnalysis, historyTurns, scratchpad, step);
             String action = normalizeAction(decision.action());
             if ("FINISH".equals(action)) {
-                return finalizeAnswer(content, hasImages, imageAnalysis, historyTurns, scratchpad, decision.finalAnswer());
+                String finalAnswer = finalizeAnswer(
+                        content, hasImages, imageAnalysis, historyTurns, scratchpad, decision.finalAnswer());
+                return new ReActResult(finalAnswer, scratchpad.toString());
             }
             // 非 FINISH 动作先执行并记录 Observation，再进入下一轮决策。
-            String observation = executeAction(action, decision.actionInput(), principal, sessionId, content, historyTurns);
+            String observation = executeAction(
+                    action,
+                    decision.actionInput(),
+                    principal,
+                    sessionId,
+                    content,
+                    historyTurns,
+                    triageSessionRepository.findBySessionId(sessionId).orElse(null));
             appendScratchpad(scratchpad, step, decision, observation);
         }
         // 到达最大步数仍未 FINISH 时，强制收敛生成最终回答，避免无限推理。
-        return finalizeAnswer(content, hasImages, imageAnalysis, historyTurns, scratchpad, "");
+        String finalAnswer = finalizeAnswer(content, hasImages, imageAnalysis, historyTurns, scratchpad, "");
+        return new ReActResult(finalAnswer, scratchpad.toString());
     }
 
     private ReActDecision planNextAction(
@@ -330,7 +371,8 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             PatientAuthPrincipal principal,
             String sessionId,
             String latestContent,
-            List<TriageTurn> historyTurns) {
+            List<TriageTurn> historyTurns,
+            TriageSession triageSession) {
         if ("RAG_SEARCH".equals(action)) {
             return observeRag(actionInput, latestContent);
         }
@@ -338,7 +380,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             return observeRag(actionInput, latestContent);
         }
         if ("RECOMMEND_HOSPITAL".equals(action)) {
-            return observeHospitalRecommendation(principal, actionInput, latestContent);
+            return observeHospitalRecommendation(principal, actionInput, latestContent, triageSession);
         }
         if ("LOG_EMERGENCY".equals(action)) {
             return observeEmergencyLogging(principal, sessionId, latestContent, actionInput);
@@ -361,12 +403,16 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     private String observeHospitalRecommendation(
             PatientAuthPrincipal principal,
             String actionInput,
-            String latestContent) {
+            String latestContent,
+            TriageSession triageSession) {
         Patient patient = patientRepository.findById(principal.getId()).orElse(null);
         String city = patient == null ? "" : patient.getResidentCity();
         String area = patient == null ? "" : patient.getArea();
         String symptomSummary = StringUtils.hasText(actionInput) ? actionInput.trim() : latestContent.trim();
-        String toolResult = medicalDecisionTools.recommendHospital(city, area, symptomSummary);
+        // 从会话中读取前端通过浏览器 Geolocation API 传入的用户坐标，用于 Haversine 距离排序。
+        BigDecimal latitude = triageSession == null ? null : triageSession.getLatitude();
+        BigDecimal longitude = triageSession == null ? null : triageSession.getLongitude();
+        String toolResult = medicalDecisionTools.recommendHospital(city, area, symptomSummary, latitude, longitude);
         return truncateObservation(toolResult);
     }
 
@@ -596,7 +642,13 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     }
 
     private List<TriageTurn> listRecentTurns(String sessionId) {
-        return triageTurnRepository.findRecentBySessionId(sessionId, MAX_HISTORY_TURNS);
+        List<TriageTurn> cached = readRecentTurnsFromCache(sessionId);
+        if (!cached.isEmpty()) {
+            return cached;
+        }
+        List<TriageTurn> loaded = triageTurnRepository.findRecentBySessionId(sessionId, MAX_HISTORY_TURNS);
+        writeRecentTurnsToCache(sessionId, loaded);
+        return loaded;
     }
 
     private void saveTurn(
@@ -604,7 +656,8 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             int turnNo,
             String content,
             String normalizedContent,
-            String reply) {
+            String reply,
+            String rawDecisionJson) {
         TriageTurn turn = TriageTurn.builder()
                 .sessionId(sessionId)
                 .turnNo(turnNo)
@@ -613,15 +666,18 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                 .intent("AI_ANALYZE")
                 .stage("analysis")
                 .replyText(reply)
+                .rawDecisionJson(rawDecisionJson)
                 .build();
         triageTurnRepository.save(turn);
+        appendTurnToCache(sessionId, turn);
     }
 
     private void updateSessionAfterTurn(
             TriageSession triageSession,
             int askRound,
             int invalidIncrement,
-            PatientAuthPrincipal principal) {
+            PatientAuthPrincipal principal,
+            String replyText) {
         Integer invalidCount = triageSession.getInvalidAnswerCount();
         if (invalidCount == null) {
             invalidCount = 0;
@@ -631,6 +687,7 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         triageSession.setCurrentStage("analysis");
         triageSession.setStatus("active");
         fillSessionProfileFromPatient(triageSession, principal);
+        fillSessionDecisionSnapshot(triageSession, replyText);
         triageSessionRepository.updateById(triageSession);
     }
 
@@ -650,27 +707,116 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         }
     }
 
+    private void fillSessionDecisionSnapshot(TriageSession triageSession, String replyText) {
+        if (!StringUtils.hasText(replyText)) {
+            return;
+        }
+        String text = replyText.trim();
+        triageSession.setSeverityLevel(inferSeverityLevel(text));
+        triageSession.setRouteType(inferRouteType(text));
+
+        Hospital matched = findHospitalMentioned(text);
+        if (matched == null) {
+            return;
+        }
+        if (!StringUtils.hasText(triageSession.getCity()) && StringUtils.hasText(matched.getCity())) {
+            triageSession.setCity(matched.getCity().trim());
+        }
+        if (!StringUtils.hasText(triageSession.getArea()) && StringUtils.hasText(matched.getDistrictName())) {
+            triageSession.setArea(matched.getDistrictName().trim());
+        }
+        if (!StringUtils.hasText(triageSession.getRouteType())
+                || "DISEASE".equals(triageSession.getRouteType())
+                || "ANALYSIS".equals(triageSession.getRouteType())) {
+            triageSession.setRouteType("HOSPITAL");
+        }
+    }
+
+    private String inferSeverityLevel(String text) {
+        String normalized = text.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, "急症", "紧急", "立即", "立刻", "120", "急救", "危险")) {
+            return "high";
+        }
+        if (containsAny(normalized, "尽快", "重视", "风险", "建议就医", "尽快就医")) {
+            return "medium";
+        }
+        return "low";
+    }
+
+    private String inferRouteType(String text) {
+        String normalized = text.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, "急诊", "急救", "120", "紧急", "立即")) {
+            return "EMERGENCY";
+        }
+        if (containsAny(normalized, "医院", "就医推荐", "就近就医")) {
+            return "HOSPITAL";
+        }
+        if (containsAny(normalized, "科室", "门诊", "挂号")) {
+            return "DEPARTMENT";
+        }
+        if (containsAny(normalized, "疾病", "诊断", "可能", "病")) {
+            return "DISEASE";
+        }
+        return "ANALYSIS";
+    }
+
+    private Hospital findHospitalMentioned(String text) {
+        if (!StringUtils.hasText(text) || !text.contains("医院")) {
+            return null;
+        }
+        List<Hospital> hospitals = hospitalRepository.findAllActive();
+        Hospital best = null;
+        int bestNameLength = -1;
+        for (int i = 0; i < hospitals.size(); i++) {
+            Hospital hospital = hospitals.get(i);
+            if (hospital == null || !StringUtils.hasText(hospital.getHospitalName())) {
+                continue;
+            }
+            String name = hospital.getHospitalName().trim();
+            if (!text.contains(name)) {
+                continue;
+            }
+            if (name.length() > bestNameLength) {
+                best = hospital;
+                bestNameLength = name.length();
+            }
+        }
+        return best;
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        for (int i = 0; i < keywords.length; i++) {
+            if (text.contains(keywords[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void upsertSlotState(String sessionId, List<TriageTurn> historyTurns, String latestContent) {
         List<String> symptoms = new ArrayList<>();
         for (int i = 0; i < historyTurns.size(); i++) {
             TriageTurn turn = historyTurns.get(i);
             if (StringUtils.hasText(turn.getUserMessage())) {
-                symptoms.add(turn.getUserMessage().trim());
+                addUnique(symptoms, turn.getUserMessage().trim());
             }
         }
-        symptoms.add(latestContent.trim());
+        addUnique(symptoms, latestContent.trim());
         String symptomsJson = toJson(symptoms);
+        String missingSlotsJson = toJson(buildMissingSlots(null, null, null, null));
 
         TriageSlotState existing = triageSlotStateRepository.findBySessionId(sessionId).orElse(null);
         if (existing == null) {
             TriageSlotState created = TriageSlotState.builder()
                     .sessionId(sessionId)
                     .symptomsJson(symptomsJson)
+                    .missingSlotsJson(missingSlotsJson)
                     .build();
             triageSlotStateRepository.save(created);
             return;
         }
         existing.setSymptomsJson(symptomsJson);
+        existing.setMissingSlotsJson(missingSlotsJson);
         triageSlotStateRepository.updateById(existing);
     }
 
@@ -680,6 +826,79 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         } catch (JsonProcessingException ex) {
             return "[]";
         }
+    }
+
+    private String buildTurnDecisionJson(
+            String content,
+            String normalizedContent,
+            List<String> images,
+            String imageAnalysis,
+            String reactTrace,
+            String status,
+            String errorMessage) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("stage", "analysis");
+        payload.put("status", status);
+        payload.put("userMessage", defaultText(content));
+        payload.put("normalizedQuery", defaultText(normalizedContent));
+        payload.put("imageCount", images == null ? 0 : images.size());
+        payload.put("images", summarizeImages(images));
+        payload.put("imageAnalysis", defaultText(imageAnalysis));
+        payload.put("reactTrace", defaultText(reactTrace));
+        payload.put("errorMessage", defaultText(errorMessage));
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException ex) {
+            return "{\"stage\":\"analysis\",\"status\":\"SERIALIZE_FAILED\"}";
+        }
+    }
+
+    private List<String> summarizeImages(List<String> images) {
+        if (images == null || images.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < images.size(); i++) {
+            String img = images.get(i);
+            if (!StringUtils.hasText(img)) {
+                continue;
+            }
+            String compact = img.trim();
+            int len = compact.length();
+            String head = compact.substring(0, Math.min(80, len));
+            result.add(head + "...(len=" + len + ")");
+        }
+        return result;
+    }
+
+    private List<String> buildMissingSlots(String diseaseName, String targetHospital, String targetDepartment, String targetDoctor) {
+        List<String> missing = new ArrayList<>();
+        if (!StringUtils.hasText(diseaseName)) {
+            missing.add("disease_name");
+        }
+        if (!StringUtils.hasText(targetHospital)) {
+            missing.add("target_hospital");
+        }
+        if (!StringUtils.hasText(targetDepartment)) {
+            missing.add("target_department");
+        }
+        if (!StringUtils.hasText(targetDoctor)) {
+            missing.add("target_doctor");
+        }
+        return missing;
+    }
+
+    private void addUnique(List<String> values, String value) {
+        if (!StringUtils.hasText(value)) {
+            return;
+        }
+        String normalized = value.trim();
+        for (int i = 0; i < values.size(); i++) {
+            if (values.get(i).equals(normalized)) {
+                return;
+            }
+        }
+        values.add(normalized);
     }
 
     private String defaultText(String text) {
@@ -694,6 +913,101 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             return null;
         }
         return value.trim();
+    }
+
+    // 将前端通过浏览器 W3C Geolocation API 获取的用户坐标写入会话。
+    // 移动端源自 GPS 芯片，桌面端源自 Wi-Fi 三角定位 / IP 粗略定位。
+    // 坐标可为 null（用户拒绝授权、浏览器不支持、或定位超时时前端不传）。
+    private void applyUserLocation(TriageSession triageSession, Double latitude, Double longitude) {
+        BigDecimal lat = normalizeCoordinate(latitude);
+        BigDecimal lon = normalizeCoordinate(longitude);
+        if (lat != null) {
+            triageSession.setLatitude(lat);
+        }
+        if (lon != null) {
+            triageSession.setLongitude(lon);
+        }
+    }
+
+    private BigDecimal normalizeCoordinate(Double value) {
+        if (value == null || value.isNaN() || value.isInfinite()) {
+            return null;
+        }
+        return BigDecimal.valueOf(value);
+    }
+
+    private List<TriageTurn> readRecentTurnsFromCache(String sessionId) {
+        if (!StringUtils.hasText(sessionId)) {
+            return Collections.emptyList();
+        }
+        try {
+            RBucket<String> bucket = redissonClient.getBucket(historyCacheKey(sessionId));
+            String json = bucket.get();
+            if (!StringUtils.hasText(json)) {
+                return Collections.emptyList();
+            }
+            List<CachedTurn> cachedTurns = objectMapper.readerForListOf(CachedTurn.class).readValue(json);
+            List<TriageTurn> result = new ArrayList<>();
+            for (int i = 0; i < cachedTurns.size(); i++) {
+                CachedTurn item = cachedTurns.get(i);
+                if (item == null) {
+                    continue;
+                }
+                result.add(TriageTurn.builder()
+                        .sessionId(sessionId)
+                        .turnNo(item.turnNo() == null ? i + 1 : item.turnNo())
+                        .userMessage(item.userMessage())
+                        .replyText(item.replyText())
+                        .build());
+            }
+            return result;
+        } catch (RuntimeException | JsonProcessingException ex) {
+            return Collections.emptyList();
+        }
+    }
+
+    private void writeRecentTurnsToCache(String sessionId, List<TriageTurn> turns) {
+        if (!StringUtils.hasText(sessionId) || turns == null) {
+            return;
+        }
+        List<CachedTurn> compact = new ArrayList<>();
+        int start = Math.max(turns.size() - MAX_HISTORY_TURNS, 0);
+        for (int i = start; i < turns.size(); i++) {
+            TriageTurn turn = turns.get(i);
+            compact.add(new CachedTurn(turn.getTurnNo(), turn.getUserMessage(), turn.getReplyText()));
+        }
+        writeCachedTurns(sessionId, compact);
+    }
+
+    private void appendTurnToCache(String sessionId, TriageTurn turn) {
+        if (!StringUtils.hasText(sessionId) || turn == null) {
+            return;
+        }
+        List<CachedTurn> compact = new ArrayList<>();
+        List<TriageTurn> existing = readRecentTurnsFromCache(sessionId);
+        for (int i = 0; i < existing.size(); i++) {
+            TriageTurn item = existing.get(i);
+            compact.add(new CachedTurn(item.getTurnNo(), item.getUserMessage(), item.getReplyText()));
+        }
+        compact.add(new CachedTurn(turn.getTurnNo(), turn.getUserMessage(), turn.getReplyText()));
+        if (compact.size() > MAX_HISTORY_TURNS) {
+            compact = new ArrayList<>(compact.subList(compact.size() - MAX_HISTORY_TURNS, compact.size()));
+        }
+        writeCachedTurns(sessionId, compact);
+    }
+
+    private void writeCachedTurns(String sessionId, List<CachedTurn> compact) {
+        try {
+            String json = objectMapper.writeValueAsString(compact);
+            RBucket<String> bucket = redissonClient.getBucket(historyCacheKey(sessionId));
+            bucket.set(json, Duration.ofMinutes(SESSION_CACHE_TTL_MINUTES));
+        } catch (RuntimeException | JsonProcessingException ex) {
+            // 缓存写入失败不影响主流程
+        }
+    }
+
+    private String historyCacheKey(String sessionId) {
+        return SESSION_HISTORY_CACHE_PREFIX + sessionId.trim();
     }
 
     private List<String> sanitizeImages(List<String> images) {
@@ -744,5 +1058,11 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
     }
 
     private record ReActDecision(String thought, String action, String actionInput, String finalAnswer) {
+    }
+
+    private record ReActResult(String finalAnswer, String trace) {
+    }
+
+    private record CachedTurn(Integer turnNo, String userMessage, String replyText) {
     }
 }

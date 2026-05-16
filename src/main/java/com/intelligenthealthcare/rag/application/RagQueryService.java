@@ -3,6 +3,7 @@ package com.intelligenthealthcare.rag.application;
 import com.intelligenthealthcare.rag.application.dto.RagSearchHitDto;
 import com.intelligenthealthcare.rag.config.RagProperties;
 import com.intelligenthealthcare.rag.domain.model.RagDocumentChunk;
+import com.intelligenthealthcare.rag.infrastructure.embedding.EmbeddingUtil;
 import com.intelligenthealthcare.rag.infrastructure.search.RagVectorSearchRepository;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -10,10 +11,6 @@ import java.util.Comparator;
 import java.util.List;
 import org.redisson.api.RMapCache;
 import org.redisson.api.RedissonClient;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.embedding.EmbeddingRequest;
-import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -28,18 +25,17 @@ public class RagQueryService {
 
     private static final String HOT_CHUNK_CACHE = "knowledge:rag:hotChunk";
 
-    private final EmbeddingModel embeddingModel;
+    private final EmbeddingUtil embeddingUtil;
     private final RagVectorSearchRepository vectorSearchRepository;
     private final RagProperties ragProperties;
     private final RedissonClient redissonClient;
 
-    // Lombok @RequiredArgsConstructor 不适用：embeddingModel 需要 @Qualifier 限定
     public RagQueryService(
-            @Qualifier("openAiEmbeddingModel") EmbeddingModel embeddingModel,
+            EmbeddingUtil embeddingUtil,
             RagVectorSearchRepository vectorSearchRepository,
             RagProperties ragProperties,
             RedissonClient redissonClient) {
-        this.embeddingModel = embeddingModel;
+        this.embeddingUtil = embeddingUtil;
         this.vectorSearchRepository = vectorSearchRepository;
         this.ragProperties = ragProperties;
         this.redissonClient = redissonClient;
@@ -49,7 +45,7 @@ public class RagQueryService {
         if (!StringUtils.hasText(naturalLanguageQuery)) {
             return List.of();
         }
-        float[] q = embed(naturalLanguageQuery.trim());
+        float[] q = embeddingUtil.embed(naturalLanguageQuery.trim());
         if (q.length != ragProperties.getEmbeddingDimensions()) {
             throw new IllegalStateException(
                     "查询嵌入维数 " + q.length + " 与 app.rag.embedding-dimensions=" + ragProperties.getEmbeddingDimensions() + " 不一致");
@@ -61,11 +57,6 @@ public class RagQueryService {
         }
         // 缓存未命中时回落到向量库（Mongo）近邻检索。
         return vectorSearchRepository.findNearestL2(q, topK);
-    }
-
-    private float[] embed(String text) {
-        EmbeddingResponse response = embeddingModel.call(new EmbeddingRequest(List.of(text), null));
-        return response.getResult().getOutput();
     }
 
     private List<RagSearchHitDto> searchFromHotCache(float[] queryEmbedding, int topK) {

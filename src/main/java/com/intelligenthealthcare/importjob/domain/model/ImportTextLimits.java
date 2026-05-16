@@ -10,6 +10,7 @@ public final class ImportTextLimits {
     public static final int ERROR_MESSAGE = 500;
     public static final int FILE_NAME = 255;
     public static final int SUGGESTION = 500;
+    public static final int RAW_CONTENT = 4000;
 
     public static String truncateMessage(String s, int max) {
         if (s == null) {

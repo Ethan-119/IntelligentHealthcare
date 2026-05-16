@@ -8,7 +8,13 @@ import java.util.List;
 
 public interface AiAnalysisService {
 
-    AiAnalyzeResult analyze(PatientAuthPrincipal principal, String sessionId, String content, List<String> images);
+    AiAnalyzeResult analyze(
+            PatientAuthPrincipal principal,
+            String sessionId,
+            String content,
+            List<String> images,
+            Double latitude,
+            Double longitude);
 
     List<AiSessionSummary> listMySessions(PatientAuthPrincipal principal);
 

@@ -14,6 +14,7 @@ import com.intelligenthealthcare.triage.application.dto.AiSessionTurn;
 import com.intelligenthealthcare.shared.security.CurrentPatient;
 import java.util.ArrayList;
 import java.util.List;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,12 +33,14 @@ public class AiAnalysisController {
     @PostMapping("/analyze")
     public AiAnalysisResponse analyze(
             @CurrentPatient PatientAuthPrincipal principal,
-            @RequestBody AiAnalysisRequest request) {
+            @Valid @RequestBody AiAnalysisRequest request) {
         AiAnalyzeResult result = aiAnalysisService.analyze(
                 principal,
                 request.getSessionId(),
                 request.getContent(),
-                request.getImages());
+                request.getImages(),
+                request.getLatitude(),
+                request.getLongitude());
         return AiAnalysisResponse.builder()
                 .sessionId(result.sessionId())
                 .result(result.result())

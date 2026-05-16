@@ -74,4 +74,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("message", ex.getMessage() != null ? ex.getMessage() : "请求参数不合法"));
     }
+
+    // 兜底：所有未预期异常返回 JSON 500，避免穿透到 Tomcat 输出 HTML 错误页并泄露堆栈。
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> handleFallback(Exception ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "服务器内部错误，请稍后重试"));
+    }
 }

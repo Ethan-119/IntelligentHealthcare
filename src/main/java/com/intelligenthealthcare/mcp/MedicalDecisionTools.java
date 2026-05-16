@@ -59,6 +59,17 @@ public class MedicalDecisionTools {
             @ToolParam(description = "城市，如 武汉市") String city,
             @ToolParam(description = "区域，如 江汉区，可为空") String area,
             @ToolParam(description = "症状描述") String symptomSummary) {
+        return recommendHospital(city, area, symptomSummary, null, null);
+    }
+
+    // 基于城市/区域和症状推荐医院，优先按用户坐标（源自浏览器 Geolocation API）计算
+    // Haversine 距离排序；无坐标时降级为仅按权威评分排序。
+    public String recommendHospital(
+            String city,
+            String area,
+            String symptomSummary,
+            BigDecimal userLatitude,
+            BigDecimal userLongitude) {
         List<Hospital> hospitals = knowledgeQueryApplicationService.findActiveHospitals();
         if (hospitals.isEmpty()) {
             return "当前无可推荐医院数据。";
@@ -70,20 +81,18 @@ public class MedicalDecisionTools {
         if (scoped.isEmpty()) {
             scoped = hospitals;
         }
-        scoped.sort(new Comparator<Hospital>() {
-            @Override
-            public int compare(Hospital a, Hospital b) {
-                BigDecimal sa = a.getAuthorityScore() == null ? BigDecimal.ZERO : a.getAuthorityScore();
-                BigDecimal sb = b.getAuthorityScore() == null ? BigDecimal.ZERO : b.getAuthorityScore();
-                return sb.compareTo(sa);
-            }
-        });
+        boolean hasUserLocation = userLatitude != null && userLongitude != null;
+        scoped.sort(buildHospitalComparator(hasUserLocation, userLatitude, userLongitude));
         Hospital chosen = scoped.get(0);
         String department = pickDepartment(chosen.getHospitalId(), symptomSummary);
         StringBuilder sb = new StringBuilder("就近就医推荐：");
         sb.append("\n- 医院：").append(defaultText(chosen.getHospitalName()));
         sb.append("\n- 城市/区域：").append(defaultText(chosen.getCity())).append(" ").append(defaultText(chosen.getDistrictName()));
         sb.append("\n- 建议科室：").append(defaultText(department));
+        if (hasUserLocation && chosen.getLatitude() != null && chosen.getLongitude() != null) {
+            double km = distanceKm(userLatitude, userLongitude, chosen.getLatitude(), chosen.getLongitude());
+            sb.append("\n- 预计距离：约 ").append(String.format(Locale.ROOT, "%.1f", km)).append(" km");
+        }
         sb.append("\n- 说明：该推荐基于当前症状关键词和就近规则，非最终临床诊断。");
         return sb.toString();
     }
@@ -145,6 +154,50 @@ public class MedicalDecisionTools {
             }
         }
         return departments.get(0).getDepartmentName();
+    }
+
+    // 医院排序策略：有用户坐标时优先按 Haversine 距离升序（距离相同再按权威评分降序）；
+    // 无坐标时仅按权威评分降序。
+    private Comparator<Hospital> buildHospitalComparator(
+            boolean hasUserLocation,
+            BigDecimal userLatitude,
+            BigDecimal userLongitude) {
+        return new Comparator<Hospital>() {
+            @Override
+            public int compare(Hospital a, Hospital b) {
+                if (hasUserLocation) {
+                    double da = distanceOrMax(userLatitude, userLongitude, a);
+                    double db = distanceOrMax(userLatitude, userLongitude, b);
+                    int byDistance = Double.compare(da, db);
+                    if (byDistance != 0) {
+                        return byDistance;
+                    }
+                }
+                BigDecimal sa = a.getAuthorityScore() == null ? BigDecimal.ZERO : a.getAuthorityScore();
+                BigDecimal sb = b.getAuthorityScore() == null ? BigDecimal.ZERO : b.getAuthorityScore();
+                return sb.compareTo(sa);
+            }
+        };
+    }
+
+    private double distanceOrMax(BigDecimal userLat, BigDecimal userLon, Hospital hospital) {
+        if (hospital == null || hospital.getLatitude() == null || hospital.getLongitude() == null) {
+            return Double.MAX_VALUE;
+        }
+        return distanceKm(userLat, userLon, hospital.getLatitude(), hospital.getLongitude());
+    }
+
+    // Haversine 公式：根据两个经纬度坐标计算球面距离（单位 km）。
+    // 地球半径 r = 6371 km，适用于医院推荐等中等精度场景（误差 < 0.3%）。
+    private double distanceKm(BigDecimal lat1, BigDecimal lon1, BigDecimal lat2, BigDecimal lon2) {
+        double r = 6371.0d;
+        double dLat = Math.toRadians(lat2.doubleValue() - lat1.doubleValue());
+        double dLon = Math.toRadians(lon2.doubleValue() - lon1.doubleValue());
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1.doubleValue()))
+                * Math.cos(Math.toRadians(lat2.doubleValue()))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return 2 * r * Math.asin(Math.sqrt(a));
     }
 
     private boolean containsAny(String text, String... keywords) {

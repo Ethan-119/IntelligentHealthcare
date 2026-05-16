@@ -59,13 +59,6 @@ public class HospitalDepartment {
     @TableField("subspecialty_code")
     private String subspecialtyCode;
 
-    @TableField("district_name")
-    private String districtName;
-
-    private BigDecimal latitude;
-
-    private BigDecimal longitude;
-
     @TableField("is_emergency")
     private Integer isEmergency;
 

@@ -34,10 +34,8 @@ public final class DiseaseMasterImportPolicy {
         }
         String symptomKeywords = trimToNull(v, "symptom_keywords");
         String genderRule = trimToDefault(v, "gender_rule", "all");
-        String ageGroup = trimToNull(v, "age_group");
         String urgency = trimToDefault(v, "urgency_level", "medium");
         String reviewSt = trimToDefault(v, "review_status", "approved");
-        String aliasesJson = trimToNull(v, "aliases_json");
 
         Integer ageMin = null;
         if (notBlank(v, "age_min")) {
@@ -59,12 +57,10 @@ public final class DiseaseMasterImportPolicy {
                 DiseaseMaster.builder()
                         .diseaseCode(code)
                         .diseaseName(name)
-                        .aliasesJson(aliasesJson)
                         .symptomKeywords(symptomKeywords)
                         .genderRule(genderRule)
                         .ageMin(ageMin)
                         .ageMax(ageMax)
-                        .ageGroup(ageGroup)
                         .urgencyLevel(urgency)
                         .reviewStatus(reviewSt)
                         .deleted(0)
