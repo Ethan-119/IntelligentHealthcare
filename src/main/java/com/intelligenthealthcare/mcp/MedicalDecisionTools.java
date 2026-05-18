@@ -2,6 +2,7 @@ package com.intelligenthealthcare.mcp;
 
 import com.intelligenthealthcare.audit.application.AuditApplicationService;
 import com.intelligenthealthcare.knowledge.application.KnowledgeQueryApplicationService;
+import com.intelligenthealthcare.knowledge.domain.model.DoctorProfile;
 import com.intelligenthealthcare.knowledge.domain.model.Hospital;
 import com.intelligenthealthcare.knowledge.domain.model.HospitalDepartment;
 import com.intelligenthealthcare.rag.application.RagQueryService;
@@ -97,6 +98,63 @@ public class MedicalDecisionTools {
         return sb.toString();
     }
 
+    public String recommendDoctor(
+            String city,
+            String area,
+            String symptomSummary,
+            BigDecimal userLatitude,
+            BigDecimal userLongitude,
+            int topN) {
+        List<Hospital> hospitals = knowledgeQueryApplicationService.findActiveHospitals();
+        if (hospitals.isEmpty()) {
+            return "当前无可推荐医院数据。";
+        }
+        String normalizedCity = normalizeText(city);
+        String normalizedArea = normalizeText(area);
+        List<Hospital> scoped = filterHospitals(hospitals, normalizedCity, normalizedArea);
+        if (scoped.isEmpty()) {
+            scoped = hospitals;
+        }
+        boolean hasUserLocation = userLatitude != null && userLongitude != null;
+        scoped.sort(buildHospitalComparator(hasUserLocation, userLatitude, userLongitude));
+        Hospital chosen = scoped.get(0);
+        String department = pickDepartment(chosen.getHospitalId(), symptomSummary);
+        Long departmentId = pickDepartmentId(chosen.getHospitalId(), department);
+
+        List<DoctorProfile> candidates = new ArrayList<>();
+        if (departmentId != null) {
+            candidates = knowledgeQueryApplicationService.findDoctorsByDepartment(departmentId);
+        }
+        if (candidates.isEmpty()) {
+            candidates = knowledgeQueryApplicationService.findDoctorsByHospital(chosen.getHospitalId());
+        }
+        if (candidates.isEmpty()) {
+            return "当前未检索到可推荐医生，建议先选择医院后由导诊台协助挂号。";
+        }
+
+        int limit = Math.max(1, Math.min(topN, 5));
+        int count = Math.min(limit, candidates.size());
+        StringBuilder sb = new StringBuilder("推荐医生（Top ").append(count).append("）：");
+        sb.append("\n- 医院：").append(defaultText(chosen.getHospitalName()));
+        sb.append("\n- 科室：").append(defaultText(department));
+        if (hasUserLocation && chosen.getLatitude() != null && chosen.getLongitude() != null) {
+            double km = distanceKm(userLatitude, userLongitude, chosen.getLatitude(), chosen.getLongitude());
+            sb.append("\n- 预计到院距离：约 ").append(String.format(Locale.ROOT, "%.1f", km)).append(" km");
+        }
+        for (int i = 0; i < count; i++) {
+            DoctorProfile doctor = candidates.get(i);
+            sb.append("\n- [").append(i + 1).append("] ")
+                    .append(defaultText(doctor.getDoctorName()))
+                    .append("（").append(defaultText(doctor.getTitle())).append("）")
+                    .append("，擅长：").append(defaultText(doctor.getSpecialtyText()));
+            if (doctor.getAuthorityScore() != null) {
+                sb.append("，权威分：").append(doctor.getAuthorityScore());
+            }
+        }
+        sb.append("\n- 说明：医生推荐基于科室匹配与权威分，具体以医院实际排班为准。");
+        return sb.toString();
+    }
+
     @Tool(description = "当疑似急症时记录预警日志，供后续审计追踪")
     public String logEmergency(
             @ToolParam(description = "用户当前症状描述") String symptomSummary,
@@ -154,6 +212,26 @@ public class MedicalDecisionTools {
             }
         }
         return departments.get(0).getDepartmentName();
+    }
+
+    private Long pickDepartmentId(String hospitalId, String departmentName) {
+        if (!StringUtils.hasText(hospitalId)) {
+            return null;
+        }
+        List<HospitalDepartment> departments = knowledgeQueryApplicationService.findDepartmentsByHospital(hospitalId);
+        if (departments.isEmpty()) {
+            return null;
+        }
+        if (StringUtils.hasText(departmentName)) {
+            String target = normalizeText(departmentName);
+            for (int i = 0; i < departments.size(); i++) {
+                HospitalDepartment department = departments.get(i);
+                if (normalizeText(department.getDepartmentName()).contains(target)) {
+                    return department.getId();
+                }
+            }
+        }
+        return departments.get(0).getId();
     }
 
     // 医院排序策略：有用户坐标时优先按 Haversine 距离升序（距离相同再按权威评分降序）；

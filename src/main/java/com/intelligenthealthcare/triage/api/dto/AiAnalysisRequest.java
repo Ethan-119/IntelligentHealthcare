@@ -19,4 +19,11 @@ public class AiAnalysisRequest {
 
     private Double latitude;
     private Double longitude;
+
+    /**
+     * 是否开启深度图片分析：
+     * false（默认）= 快速模式，分析较少图片；
+     * true = 深度模式，分析更多图片，耗时更长。
+     */
+    private Boolean deepImageAnalysis;
 }

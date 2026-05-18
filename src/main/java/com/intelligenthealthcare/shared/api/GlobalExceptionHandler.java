@@ -5,12 +5,15 @@ import com.intelligenthealthcare.importjob.domain.exception.ImportReviewItemNotF
 import com.intelligenthealthcare.patient.domain.exception.PatientNotFoundException;
 import com.intelligenthealthcare.patient.domain.exception.PatientPhoneAlreadyUsedException;
 import com.intelligenthealthcare.patient.domain.exception.PatientPhoneRequiredException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
@@ -75,10 +78,42 @@ public class GlobalExceptionHandler {
                 .body(Map.of("message", ex.getMessage() != null ? ex.getMessage() : "请求参数不合法"));
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, String>> handleMessageNotReadable(HttpMessageNotReadableException ex) {
+        String message = "请求体格式错误，请检查参数类型";
+        Throwable cause = ex.getCause();
+        if (cause != null && cause.getMessage() != null) {
+            // 提取 Jackson 枚举反序列化失败的友好提示
+            String detail = cause.getMessage();
+            if (detail.contains("not one of the values accepted")) {
+                message = "请求参数值不合法: " + detail.substring(0, Math.min(detail.length(), 200));
+            }
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", message));
+    }
+
     // 兜底：所有未预期异常返回 JSON 500，避免穿透到 Tomcat 输出 HTML 错误页并泄露堆栈。
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, String>> handleFallback(Exception ex) {
+    public ResponseEntity<?> handleFallback(Exception ex, HttpServletRequest request) {
+        if (isSseRequest(request)) {
+            // SSE 请求不能回写 Map(JSON) 到 text/event-stream，否则会触发 HttpMessageNotWritableException。
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.TEXT_EVENT_STREAM)
+                    .body("event: error\ndata: 服务器内部错误，请稍后重试\n\n");
+        }
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "服务器内部错误，请稍后重试"));
+    }
+
+    private boolean isSseRequest(HttpServletRequest request) {
+        if (request == null) {
+            return false;
+        }
+        String uri = request.getRequestURI();
+        String accept = request.getHeader("Accept");
+        if (uri != null && uri.contains("/api/ai/analyze/stream")) {
+            return true;
+        }
+        return accept != null && accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE);
     }
 }

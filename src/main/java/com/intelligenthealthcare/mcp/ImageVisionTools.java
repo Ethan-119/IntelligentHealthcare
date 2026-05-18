@@ -63,7 +63,13 @@ public class ImageVisionTools {
     public String analyzeMedicalImages(
             @ToolParam(description = "Base64 编码的图片数据列表") List<String> base64Images,
             @ToolParam(description = "患者症状描述、个人信息等上下文") String medicalContext) {
+        return analyzeMedicalImages(base64Images, medicalContext, null);
+    }
 
+    public String analyzeMedicalImages(
+            List<String> base64Images,
+            String medicalContext,
+            Integer maxAnalyzeCount) {
         if (!enabled) {
             return "视觉分析服务未启用。";
         }
@@ -82,7 +88,11 @@ public class ImageVisionTools {
             return "无法解析任何图片数据。";
         }
 
-        int analyzeCount = Math.min(decodedImages.size(), maxImages);
+        int effectiveLimit = maxImages;
+        if (maxAnalyzeCount != null && maxAnalyzeCount > 0) {
+            effectiveLimit = Math.min(maxAnalyzeCount, decodedImages.size());
+        }
+        int analyzeCount = Math.min(decodedImages.size(), effectiveLimit);
         List<String> results = new ArrayList<>();
         for (int i = 0; i < analyzeCount; i++) {
             try {

@@ -19,6 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import jakarta.servlet.DispatcherType;
 
 import java.util.Arrays;
 import java.util.List;
@@ -48,11 +49,14 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // SSE/异步与错误派发阶段不再重复走业务鉴权，避免 response committed 后再次 403
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         // 浏览器跨域预检
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // 首页、健康检查、注册与登录不校验 JWT
                         .requestMatchers(
                                 "/",
+                                "/error",
                                 "/api/health",
                                 "/api/auth/**"
                         )

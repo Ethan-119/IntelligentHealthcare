@@ -16,12 +16,14 @@ import java.util.ArrayList;
 import java.util.List;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/ai")
@@ -40,12 +42,33 @@ public class AiAnalysisController {
                 request.getContent(),
                 request.getImages(),
                 request.getLatitude(),
-                request.getLongitude());
+                request.getLongitude(),
+                request.getDeepImageAnalysis());
         return AiAnalysisResponse.builder()
                 .sessionId(result.sessionId())
                 .result(result.result())
                 .imageAnalysis(result.imageAnalysis())
                 .build();
+    }
+
+    /**
+     * 流式 SSE 端点：直接返回 SseEmitter（非 Flux），每次 send() 立即 flush 到客户端。
+     * <p>
+     * 请求线程仅创建 SseEmitter 并提交到 TaskExecutor 即释放；
+     * 后续的业务逻辑、AI 调用、逐 token 推送均在 Worker 线程中完成。
+     */
+    @PostMapping(value = "/analyze/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter analyzeStream(
+            @CurrentPatient PatientAuthPrincipal principal,
+            @Valid @RequestBody AiAnalysisRequest request) {
+        return aiAnalysisService.analyzeStream(
+                principal,
+                request.getSessionId(),
+                request.getContent(),
+                request.getImages(),
+                request.getLatitude(),
+                request.getLongitude(),
+                request.getDeepImageAnalysis());
     }
 
     @GetMapping("/sessions")

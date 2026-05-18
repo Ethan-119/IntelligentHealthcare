@@ -42,4 +42,13 @@ public class MybatisDoctorProfileRepository implements DoctorProfileRepository {
         query.orderByDesc(DoctorProfile::getAuthorityScore);
         return doctorProfileMapper.selectList(query);
     }
+
+    @Override
+    public List<DoctorProfile> findByHospitalId(String hospitalId) {
+        LambdaQueryWrapper<DoctorProfile> query = new LambdaQueryWrapper<>();
+        query.eq(DoctorProfile::getHospitalId, hospitalId);
+        query.eq(DoctorProfile::getActiveStatus, 1);
+        query.orderByDesc(DoctorProfile::getAuthorityScore);
+        return doctorProfileMapper.selectList(query);
+    }
 }

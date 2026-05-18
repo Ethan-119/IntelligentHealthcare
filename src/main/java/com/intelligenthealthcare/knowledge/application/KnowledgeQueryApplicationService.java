@@ -18,9 +18,10 @@ import com.intelligenthealthcare.knowledge.domain.repository.DoctorProfileReposi
 import com.intelligenthealthcare.knowledge.domain.repository.HospitalDepartmentRepository;
 import com.intelligenthealthcare.knowledge.domain.repository.HospitalRepository;
 import com.intelligenthealthcare.knowledge.domain.repository.MedicalCapabilityRepository;
-import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,8 @@ public class KnowledgeQueryApplicationService {
     private static final long TTL_10_MINUTES = 10L;
     private static final long TTL_30_MINUTES = 30L;
     private static final long TTL_60_MINUTES = 60L;
+    private static final long HOT_TTL_24_HOURS_MINUTES = 24L * 60L;
+    private static final List<String> HOT_SCOPE_ALL = List.of("disease", "hospital", "department", "doctor", "capability");
 
     private final DiseaseMasterRepository diseaseMasterRepository;
     private final DiseaseAliasRepository diseaseAliasRepository;
@@ -113,6 +116,11 @@ public class KnowledgeQueryApplicationService {
                 () -> doctorProfileRepository.findByDepartmentId(departmentId));
     }
 
+    public List<DoctorProfile> findDoctorsByHospital(String hospitalId) {
+        return getListCache(CACHE_DOCTOR, "hospital:" + hospitalId, TTL_10_MINUTES,
+                () -> doctorProfileRepository.findByHospitalId(hospitalId));
+    }
+
     public DoctorProfile findDoctorById(Long id) {
         return getObjectCache(CACHE_DOCTOR, "id:" + id, TTL_10_MINUTES,
                 () -> doctorProfileRepository.findById(id).orElse(null));
@@ -155,33 +163,27 @@ public class KnowledgeQueryApplicationService {
 
     public void refreshHotCaches() {
         evictKnowledgeCaches();
+        addHotspots(HOT_SCOPE_ALL);
+    }
 
-        List<DiseaseMaster> diseases = findActiveDiseases();
-        List<HospitalDepartment> departments = findActiveDepartments();
-        List<DoctorProfile> doctors = findHotDoctors();
-
-        findActiveHospitals();
-        findAllCapabilityKnowledge();
-
-        List<String> diseaseCodes = diseases.stream().map(DiseaseMaster::getDiseaseCode).toList();
-        for (int i = 0; i < diseaseCodes.size(); i++) {
-            String diseaseCode = diseaseCodes.get(i);
-            findAliasesByDiseaseCode(diseaseCode);
-            findCapabilitiesByDisease(diseaseCode);
+    public HotspotWarmupResult addHotspots(List<String> scopes) {
+        List<String> normalizedScopes = normalizeScopes(scopes);
+        int warmedEntries = 0;
+        for (int i = 0; i < normalizedScopes.size(); i++) {
+            String scope = normalizedScopes.get(i);
+            if ("disease".equals(scope)) {
+                warmedEntries += warmDiseaseHotspots();
+            } else if ("hospital".equals(scope)) {
+                warmedEntries += warmHospitalHotspots();
+            } else if ("department".equals(scope)) {
+                warmedEntries += warmDepartmentHotspots();
+            } else if ("doctor".equals(scope)) {
+                warmedEntries += warmDoctorHotspots();
+            } else if ("capability".equals(scope)) {
+                warmedEntries += warmCapabilityHotspots();
+            }
         }
-
-        List<Long> departmentIds = departments.stream().map(HospitalDepartment::getId).toList();
-        for (int i = 0; i < departmentIds.size(); i++) {
-            Long departmentId = departmentIds.get(i);
-            findCapabilitiesByDepartment(departmentId);
-            findDoctorsByDepartment(departmentId);
-        }
-
-        List<Long> doctorIds = doctors.stream().map(DoctorProfile::getId).toList();
-        for (int i = 0; i < doctorIds.size(); i++) {
-            Long doctorId = doctorIds.get(i);
-            findCapabilitiesByDoctor(doctorId);
-        }
+        return new HotspotWarmupResult(normalizedScopes, warmedEntries);
     }
 
     private <T> T getObjectCache(String mapName, String key, long ttlMinutes, Supplier<T> loader) {
@@ -203,5 +205,164 @@ public class KnowledgeQueryApplicationService {
             return Collections.emptyList();
         }
         return cached;
+    }
+
+    private List<String> normalizeScopes(List<String> scopes) {
+        if (scopes == null || scopes.isEmpty()) {
+            return HOT_SCOPE_ALL;
+        }
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < scopes.size(); i++) {
+            String raw = scopes.get(i);
+            if (raw == null || raw.isBlank()) {
+                continue;
+            }
+            String normalized = raw.trim().toLowerCase(Locale.ROOT);
+            if (!HOT_SCOPE_ALL.contains(normalized)) {
+                continue;
+            }
+            if (!result.contains(normalized)) {
+                result.add(normalized);
+            }
+        }
+        return result.isEmpty() ? HOT_SCOPE_ALL : result;
+    }
+
+    private int warmDiseaseHotspots() {
+        int warmed = 0;
+        List<DiseaseMaster> diseases = diseaseMasterRepository.findAllActive();
+        if (putHotListCache(CACHE_DISEASE, "allActive", diseases)) {
+            warmed++;
+        }
+        for (int i = 0; i < diseases.size(); i++) {
+            DiseaseMaster disease = diseases.get(i);
+            if (disease == null || disease.getDiseaseCode() == null || disease.getDiseaseCode().isBlank()) {
+                continue;
+            }
+            String code = disease.getDiseaseCode().trim();
+            if (putHotObjectCache(CACHE_DISEASE, "code:" + code, disease)) {
+                warmed++;
+            }
+            List<DiseaseAlias> aliases = diseaseAliasRepository.findByDiseaseCode(code);
+            if (putHotListCache(CACHE_DISEASE, "alias:" + code, aliases)) {
+                warmed++;
+            }
+            List<DiseaseCapabilityRel> rels = diseaseCapabilityRelRepository.findByDiseaseCode(code);
+            if (putHotListCache(CACHE_CAPABILITY, "disease:" + code, rels)) {
+                warmed++;
+            }
+        }
+        return warmed;
+    }
+
+    private int warmHospitalHotspots() {
+        int warmed = 0;
+        List<Hospital> hospitals = hospitalRepository.findAllActive();
+        if (putHotListCache(CACHE_HOSPITAL, "allActive", hospitals)) {
+            warmed++;
+        }
+        for (int i = 0; i < hospitals.size(); i++) {
+            Hospital hospital = hospitals.get(i);
+            if (hospital == null || hospital.getHospitalId() == null || hospital.getHospitalId().isBlank()) {
+                continue;
+            }
+            String hospitalId = hospital.getHospitalId().trim();
+            if (putHotObjectCache(CACHE_HOSPITAL, "id:" + hospitalId, hospital)) {
+                warmed++;
+            }
+            List<HospitalDepartment> departments = hospitalDepartmentRepository.findByHospitalId(hospitalId);
+            if (putHotListCache(CACHE_DEPARTMENT, "hospital:" + hospitalId, departments)) {
+                warmed++;
+            }
+        }
+        return warmed;
+    }
+
+    private int warmDepartmentHotspots() {
+        int warmed = 0;
+        List<HospitalDepartment> departments = hospitalDepartmentRepository.findAllActive();
+        if (putHotListCache(CACHE_DEPARTMENT, "allActive", departments)) {
+            warmed++;
+        }
+        for (int i = 0; i < departments.size(); i++) {
+            HospitalDepartment department = departments.get(i);
+            if (department == null || department.getId() == null) {
+                continue;
+            }
+            Long departmentId = department.getId();
+            if (putHotObjectCache(CACHE_DEPARTMENT, "id:" + departmentId, department)) {
+                warmed++;
+            }
+            List<DepartmentCapabilityRel> rels = departmentCapabilityRelRepository.findByDepartmentId(departmentId);
+            if (putHotListCache(CACHE_CAPABILITY, "dept:" + departmentId, rels)) {
+                warmed++;
+            }
+            List<DoctorProfile> doctors = doctorProfileRepository.findByDepartmentId(departmentId);
+            if (putHotListCache(CACHE_DOCTOR, "dept:" + departmentId, doctors)) {
+                warmed++;
+            }
+        }
+        return warmed;
+    }
+
+    private int warmDoctorHotspots() {
+        int warmed = 0;
+        List<DoctorProfile> hotDoctors = doctorProfileRepository.findHotDoctors(50);
+        if (putHotListCache(CACHE_DOCTOR, "hot", hotDoctors)) {
+            warmed++;
+        }
+        for (int i = 0; i < hotDoctors.size(); i++) {
+            DoctorProfile doctor = hotDoctors.get(i);
+            if (doctor == null || doctor.getId() == null) {
+                continue;
+            }
+            Long doctorId = doctor.getId();
+            if (putHotObjectCache(CACHE_DOCTOR, "id:" + doctorId, doctor)) {
+                warmed++;
+            }
+            List<DoctorCapabilityRel> rels = doctorCapabilityRelRepository.findByDoctorId(doctorId);
+            if (putHotListCache(CACHE_CAPABILITY, "doctor:" + doctorId, rels)) {
+                warmed++;
+            }
+        }
+        return warmed;
+    }
+
+    private int warmCapabilityHotspots() {
+        int warmed = 0;
+        List<MedicalCapabilityKnowledge> capabilities = medicalCapabilityRepository.findAllActive();
+        if (putHotListCache(CACHE_CAPABILITY, "knowledge:all", capabilities)) {
+            warmed++;
+        }
+        for (int i = 0; i < capabilities.size(); i++) {
+            MedicalCapabilityKnowledge capability = capabilities.get(i);
+            if (capability == null || capability.getCapabilityCode() == null || capability.getCapabilityCode().isBlank()) {
+                continue;
+            }
+            String code = capability.getCapabilityCode().trim();
+            List<DepartmentCapabilityRel> departments = departmentCapabilityRelRepository.findByCapabilityCode(code);
+            if (putHotListCache(CACHE_CAPABILITY, "deptByCap:" + code, departments)) {
+                warmed++;
+            }
+        }
+        return warmed;
+    }
+
+    private <T> boolean putHotObjectCache(String mapName, String key, T value) {
+        if (value == null) {
+            return false;
+        }
+        redissonClient.getMapCache(mapName).put(key, value, HOT_TTL_24_HOURS_MINUTES, TimeUnit.MINUTES);
+        return true;
+    }
+
+    private <T> boolean putHotListCache(String mapName, String key, List<T> values) {
+        if (values == null) {
+            return false;
+        }
+        return putHotObjectCache(mapName, key, values);
+    }
+
+    public record HotspotWarmupResult(List<String> scopes, int warmedEntries) {
     }
 }

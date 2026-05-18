@@ -8,4 +8,5 @@ public interface DoctorProfileRepository {
     List<DoctorProfile> findHotDoctors(int limit);
     Optional<DoctorProfile> findById(Long id);
     List<DoctorProfile> findByDepartmentId(Long departmentId);
+    List<DoctorProfile> findByHospitalId(String hospitalId);
 }

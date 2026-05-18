@@ -16,6 +16,7 @@ public class CurrentPatientResponse {
 
     Long id;
     String username;
+    String phone;
     Integer status;
     PatientRole role;
     Integer patientAge;
@@ -28,6 +29,7 @@ public class CurrentPatientResponse {
         return CurrentPatientResponse.builder()
                 .id(p.getId())
                 .username(p.getUsername())
+                .phone(p.getPhone())
                 .status(p.getStatus())
                 .role(p.getRole())
                 .patientAge(p.getPatientAge())

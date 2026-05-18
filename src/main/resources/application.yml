@@ -19,7 +19,7 @@ spring:
         options:
           model: qwen-plus
           temperature: 0.3
-          max-tokens: 1024
+          max-tokens: 2304
       embedding:
         options:
           model: text-embedding-v3
@@ -78,20 +78,21 @@ app:
   jwt:
     secret: "change-me-dev-only-use-32-chars-minimum-key!!"
     # accessToken 在签发后的大致有效毫秒数，需与客户端刷新策略配合
-    expiration-ms: 86400000
+    expiration-ms: 28800000
   # 与 MongoDB 向量索引维度保持一致
   rag:
     embedding-dimensions: 1024
   agent:
     react:
-      max-steps: 4
+      max-steps: 2
       rag-top-k: 3
       debug-trace: false
   # MCP 图片视觉分析配置：使用 DashScope 多模态模型
   vision:
     enabled: true
     model: qwen-vl-plus
-    max-images: 5
+    max-images: 2
+    deep-max-images: 5
     analysis-timeout-ms: 30000
   cache:
     knowledge:
