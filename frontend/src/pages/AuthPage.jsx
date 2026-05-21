@@ -69,9 +69,11 @@ function LoginForm({ onSuccess }) {
         </label>
         <input
           style={inputStyle}
-          placeholder="请输入手机号"
+          placeholder="请输入11位手机号"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
+          pattern="1[3-9]\d{9}"
+          title="请输入有效的11位手机号"
           required
         />
       </div>
@@ -119,6 +121,8 @@ function RegisterForm({ onSuccess }) {
       await register({
         ...form,
         patientAge: form.patientAge ? parseInt(form.patientAge, 10) : null,
+        patientGender: form.patientGender || null,
+        triagePrefer: form.triagePrefer || null,
       });
       onSuccess();
     } catch (err) {
@@ -139,9 +143,11 @@ function RegisterForm({ onSuccess }) {
         </label>
         <input
           style={inputStyle}
-          placeholder="请输入手机号"
+          placeholder="请输入11位手机号"
           value={form.phone}
           onChange={(e) => set("phone", e.target.value)}
+          pattern="1[3-9]\d{9}"
+          title="请输入有效的11位手机号"
           required
         />
       </div>
