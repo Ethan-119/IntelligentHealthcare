@@ -346,41 +346,50 @@ INSERT INTO import_review_item (id, job_id, item_key, issue_type, raw_content, s
 (6, 4, 'DEPT_PAIN',     'NEW_ENTRY',       '{"department_name":"疼痛科","hospital":"瑞金医院"}',     '标准库中暂无对应编码，建议新建 STD_PAIN',       0, NULL);
 SELECT setval('import_review_item_id_seq', 6);
 
--- ========================== AI RECALL AUDIT LOG AI召回审计日志 (8条)
+-- ========================== AI RECALL AUDIT LOG AI召回审计日志 (10条)
+-- 覆盖场景：纯文本、图片辅助、位置推荐、多轮连续、空输入
 INSERT INTO ai_recall_audit_log (id, symptoms, gender, age, age_group, eligible_disease_count, rule_candidate_codes_json, suggested_codes_json, status, message) VALUES
 (1, '头痛,头晕,心悸', 'male', 55, 'elder', 5,
  '["DIS_001","DIS_003","DIS_004","DIS_010","DIS_024"]',
  '["DIS_001","DIS_003","DIS_024"]',
- 'SUCCESS', '召回成功：规则候选5个，AI精选3个，准确率良好'),
+ 'SUCCESS', '召回成功：规则候选5个，AI精选3个。位置已授权（成都武侯），触发就近医院推荐华西医院(HOSP_004)。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
 (2, '胸痛,胸闷,气短,放射痛', 'male', 62, 'elder', 4,
  '["DIS_003","DIS_005","DIS_024","DIS_001"]',
  '["DIS_003","DIS_001"]',
- 'SUCCESS', '召回成功：症状与冠心病高度匹配'),
+ 'SUCCESS', '召回成功：症状与冠心病高度匹配，胸痛放射至左臂为心绞痛特征性表现，建议行冠脉CTA或造影。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
 (3, '多饮,多尿,体重下降,乏力', 'female', 45, 'adult', 5,
  '["DIS_002","DIS_010","DIS_009","DIS_013","DIS_024"]',
  '["DIS_002","DIS_010"]',
- 'SUCCESS', '召回成功：建议进一步血糖及甲功检查'),
-(4, '咳嗽,发热,胸痛,呼吸困难', 'male', 8, 'child', 3,
- '["DIS_005","DIS_006","DIS_015"]',
+ 'SUCCESS', '召回成功：三多一少症状提示糖尿病与甲亢需鉴别。位置已授权（北京东城），触发就近医院推荐协和医院(HOSP_001)。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
+(4, '咳嗽,发热,胸痛,呼吸困难', 'male', 8, 'child', 5,
+ '["DIS_005","DIS_006","DIS_015","DIS_014","DIS_022"]',
  '["DIS_005","DIS_006"]',
- 'SUCCESS', '召回成功：儿童肺炎与哮喘待鉴别'),
-(5, '关节肿痛,晨僵,对称性', 'female', 52, 'elder', 4,
+ 'SUCCESS', '召回成功：图片辅助分析（胸部皮损照片.jpg），皮损非呼吸道直接相关，发热更倾向肺炎。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
+(5, '关节肿痛,晨僵,对称性,双手关节图片', 'female', 52, 'elder', 4,
  '["DIS_011","DIS_012","DIS_023","DIS_025"]',
  '["DIS_011","DIS_023"]',
- 'SUCCESS', '召回成功：类风湿关节炎可能性较大'),
-(6, '情绪低落,睡眠障碍,食欲下降', 'female', 28, 'adult', 4,
+ 'SUCCESS', '召回成功：深度图片分析（2张）确认关节肿胀形态符合RA表现，对称性小关节肿痛伴晨僵高度提示类风湿关节炎，建议查RF和抗CCP抗体。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
+(6, '情绪低落,睡眠障碍,食欲下降,注意力减退,自伤念头', 'female', 28, 'adult', 4,
  '["DIS_013","DIS_024","DIS_010","DIS_003"]',
- '["DIS_013","DIS_024"]',
- 'SUCCESS', '召回成功：抑郁与焦虑待评估'),
-(7, '下腹痛,发热,恶心', 'female', 25, 'adult', 6,
- '["DIS_016","DIS_019","DIS_005","DIS_007","DIS_017","DIS_009"]',
- '["DIS_016","DIS_019"]',
- 'PARTIAL', '部分命中：需排除妇科急症与阑尾炎'),
-(8, '', 'male', 35, 'adult', 0,
+ '["DIS_013"]',
+ 'SUCCESS', '召回成功：第2轮触发自伤风险红旗标记，AI已建议立即就医并提供心理危机干预热线。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
+(7, '右上腹痛,恶心,油腻餐后加重,右肩放射,超声报告图片', 'female', 30, 'adult', 4,
+ '["DIS_017","DIS_016","DIS_007","DIS_003"]',
+ '["DIS_017"]',
+ 'SUCCESS', '召回成功：症状高度典型（油腻餐后右上腹痛+右肩放射），深度图片分析超声报告确认胆结石。位置已授权（广州越秀），触发就近医院推荐中山一院(HOSP_003)。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
+(8, '下腹痛,发热,恶心', 'female', 25, 'adult', 6,
+ '["DIS_016","DIS_019","DIS_017","DIS_005","DIS_007","DIS_009"]',
+ '["DIS_016","DIS_019","DIS_017"]',
+ 'PARTIAL', '部分命中：育龄女性下腹痛需鉴别妇科急症与外科急腹症，位置信息（上海黄浦）触发就近三甲瑞金医院(HOSP_002)推荐。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
+(9, '皮肤瘙痒,干燥,下肢水肿,尿量减少,恶心,乏力,下肢皮肤图片', 'male', 60, 'elder', 4,
+ '["DIS_009","DIS_014","DIS_008","DIS_002"]',
+ '["DIS_009","DIS_008"]',
+ 'SUCCESS', '召回成功：多轮对话（3轮）逐步暴露全身性症状，图片排除单纯皮肤病，症状组合指向肾功能或肝功能异常。免责声明：这不是最终临床诊断，为了您的健康，请前往医院进一步检查。'),
+(10, '', 'male', 35, 'adult', 0,
  '[]',
  '[]',
- 'EMPTY_INPUT', '输入症状为空，无法进行AI召回');
-SELECT setval('ai_recall_audit_log_id_seq', 8);
+ 'EMPTY_INPUT', '输入症状为空，无法进行AI召回。系统已触发空输入提示，引导用户至少提供1个核心症状或上传图片以启动导诊流程。');
+SELECT setval('ai_recall_audit_log_id_seq', 10);
 
 -- ========================== TRIAGE SESSION 导诊会话 (6条)
 INSERT INTO triage_session (id, session_id, user_id, dialog_id, current_stage, ask_round, invalid_answer_count, city, area, nearby, latitude, longitude, patient_age, patient_gender, severity_level, route_type, status) VALUES
@@ -398,7 +407,7 @@ INSERT INTO triage_turn (id, session_id, turn_no, user_message, normalized_query
 (1,  'SESS_001', 1, '我最近总是头疼头晕',                       '头痛 头晕',                         'SYMPTOM_REPORT', 'SYMPTOM_INPUT',  '您好，我是AI导诊助手。请问您的症状持续多久了？除了头痛头晕，还有其他不适吗？', '{"stage":"SYMPTOM_INPUT","slots":{"symptoms":["头痛","头晕"]}}'),
 (2,  'SESS_001', 2, '有一个多月了，有时候还会心慌',              '头痛 头晕 心悸 持续1月',             'SYMPTOM_REPORT', 'SYMPTOM_INPUT',  '了解了。为了更好地为您分析，请问您的年龄和性别是？',                             '{"stage":"SYMPTOM_INPUT","slots":{"symptoms":["头痛","头晕","心悸"],"duration":"1月"}}'),
 (3,  'SESS_001', 3, '我今年35岁，男的',                         '年龄35 性别男',                      'PROFILE_INFO',   'SLOT_FILLING',  '好的，已记录。根据您的症状和基本信息，为您分析可能的疾病方向...',                  '{"stage":"SLOT_FILLING","slots":{"age":35,"gender":"male"}}'),
-(4,  'SESS_001', 4, NULL,                                       NULL,                                'DISEASE_SUGGEST','DISEASE_DONE',  '根据您的症状（头痛、头晕、心悸），可能涉及：\n1. 原发性高血压\n2. 冠心病\n建议您到心血管内科就诊检查。', '{"suggested":["DIS_001","DIS_003"],"confidence":0.87}'),
+(4,  'SESS_001', 4, NULL,                                       NULL,                                'DISEASE_SUGGEST','DISEASE_DONE',  '根据您的症状（头痛、头晕、心悸），可能涉及：\n1. 原发性高血压\n2. 冠心病\n建议您到心血管内科就诊检查。\n\n这不是最终临床诊断，为了您的健康，请前往医院进一步检查。', '{"suggested":["DIS_001","DIS_003"],"confidence":0.87}'),
 (5,  'SESS_001', 5, '好的，帮我推荐附近的医院',                  '推荐附近医院 心内科',                 'HOSPITAL_QUERY', 'DEPARTMENT',   '为您找到以下附近医院的心血管内科：\n1. 北京协和医院（东城区）— 国家临床重点专科\n2. 北京市海淀医院（海淀区）', '{"recommended_hospitals":[{"id":"HOSP_001","dept":"心血管内科","score":97.5}]}'),
 
 -- SESS_002: 李娜 — 皮肤问题
@@ -417,7 +426,7 @@ INSERT INTO triage_turn (id, session_id, turn_no, user_message, normalized_query
 
 -- SESS_004: 孙鹏 — 脑卒中
 (16, 'SESS_004', 1, '我爸突然说话不清楚了，嘴巴有点歪',          '老年人 言语不清 口眼歪斜 突发',        'SYMPTOM_REPORT', 'SYMPTOM_INPUT', '这是紧急情况！请立即拨打120或前往最近医院的急诊科！这可能是脑卒中的征兆！',      '{"stage":"SYMPTOM_INPUT","severity":"critical","alert":"STROKE_WARNING"}'),
-(17, 'SESS_004', 2, '他61岁，有高血压，会不会是中风？',          '61岁 高血压史 疑似中风',               'PROFILE_INFO',   'SLOT_FILLING',  '根据症状描述（突发言语不清、口角歪斜），高度怀疑急性脑卒中。请立刻就医！每延误一分钟，脑细胞都在受损。', '{"stage":"DISEASE_DONE","suggested":["DIS_004"],"urgency":"critical"}'),
+(17, 'SESS_004', 2, '他61岁，有高血压，会不会是中风？',          '61岁 高血压史 疑似中风',               'PROFILE_INFO',   'SLOT_FILLING',  '根据症状描述（突发言语不清、口角歪斜），高度怀疑急性脑卒中。请立刻就医！每延误一分钟，脑细胞都在受损。\n\n这不是最终临床诊断，为了您的健康，请前往医院进一步检查。', '{"stage":"DISEASE_DONE","suggested":["DIS_004"],"urgency":"critical"}'),
 (18, 'SESS_004', 3, '附近有什么医院可以急救？',                  '附近 急诊 医院',                       'HOSPITAL_QUERY', 'EMERGENCY',    '为您紧急定位附近急诊医院：\n1. 上海市浦东新区人民医院 — 急诊科\n请立即前往！', '{"recommended":[{"hospital":"HOSP_007","dept":"急诊科","type":"EMERGENCY"}]}'),
 (19, 'SESS_004', 4, '好，马上去',                                '确认 立即就医',                        'CONFIRM',        'COMPLETED',    '请务必尽快！路上注意安全，到达医院后直接去急诊科。',                               '{"stage":"COMPLETED","user_action":"EMERGENCY_DEPART"}'),
 

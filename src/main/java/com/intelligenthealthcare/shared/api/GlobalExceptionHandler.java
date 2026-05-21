@@ -6,6 +6,8 @@ import com.intelligenthealthcare.patient.domain.exception.PatientNotFoundExcepti
 import com.intelligenthealthcare.patient.domain.exception.PatientPhoneAlreadyUsedException;
 import com.intelligenthealthcare.patient.domain.exception.PatientPhoneRequiredException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +25,7 @@ import java.util.Map;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException ex) {
@@ -95,6 +98,8 @@ public class GlobalExceptionHandler {
     // 兜底：所有未预期异常返回 JSON 500，避免穿透到 Tomcat 输出 HTML 错误页并泄露堆栈。
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleFallback(Exception ex, HttpServletRequest request) {
+        String uri = request == null ? "unknown" : request.getRequestURI();
+        log.error("Unhandled exception on uri={}", uri, ex);
         if (isSseRequest(request)) {
             // SSE 请求不能回写 Map(JSON) 到 text/event-stream，否则会触发 HttpMessageNotWritableException。
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

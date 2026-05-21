@@ -4,9 +4,7 @@ import com.intelligenthealthcare.patient.domain.model.PatientRole;
 import lombok.Builder;
 import lombok.Value;
 
-/**
- * 放入 {@link org.springframework.security.core.context.SecurityContext} 的患者身份信息。
- */
+/** 当前请求中的患者身份信息。 */
 @Value
 @Builder
 public class PatientAuthPrincipal {

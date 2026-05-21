@@ -6,6 +6,7 @@ import com.intelligenthealthcare.auth.api.dto.RegisterRequest;
 import com.intelligenthealthcare.auth.api.dto.TokenResponse;
 import com.intelligenthealthcare.auth.config.JwtProperties;
 import com.intelligenthealthcare.auth.domain.PatientAuthPrincipal;
+import com.intelligenthealthcare.auth.infrastructure.security.PasswordHashService;
 import com.intelligenthealthcare.auth.infrastructure.jwt.JwtService;
 import com.intelligenthealthcare.patient.domain.model.Gender;
 import com.intelligenthealthcare.patient.domain.model.Patient;
@@ -14,24 +15,26 @@ import com.intelligenthealthcare.patient.domain.model.TriagePrefer;
 import com.intelligenthealthcare.patient.domain.repository.PatientRepository;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
 /**
- * 患者注册/登录与当前用户信息；密码仅经 {@link org.springframework.security.crypto.password.PasswordEncoder} 单向存储。
+ * 患者注册/登录与当前用户信息；密码仅经 {@link PasswordHashService} 单向存储。
  */
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final PatientRepository patientRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final PasswordHashService passwordHashService;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
     private final StringRedisTemplate stringRedisTemplate;
@@ -54,7 +57,7 @@ public class AuthService {
         Patient toSave = Patient.builder()
                 .phone(phone)
                 .username(trimToNull(request.getUsername()))
-                .password(passwordEncoder.encode(password))
+                .password(passwordHashService.hash(password))
                 .status(1)
                 .role(PatientRole.PATIENT)
                 .deleted(0)
@@ -87,7 +90,7 @@ public class AuthService {
                 || (patient.getDeleted() != null && Integer.valueOf(1).equals(patient.getDeleted()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "账号已禁用");
         }
-        if (patient.getPassword() == null || !passwordEncoder.matches(request.getPassword(), patient.getPassword())) {
+        if (patient.getPassword() == null || !passwordHashService.matches(request.getPassword(), patient.getPassword())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }
         return buildTokenResponse(patient);
@@ -107,11 +110,16 @@ public class AuthService {
         // 第一步：签发 JWT
         String token = jwtService.createToken(patient.getId());
         // 第二步：把最新 token 写入 Redis（同一用户后登录会覆盖旧 token）
-        stringRedisTemplate.opsForValue().set(
-                buildTokenKey(patient.getId()),
-                token,
-                jwtProperties.expirationMs(),
-                TimeUnit.MILLISECONDS);
+        try {
+            stringRedisTemplate.opsForValue().set(
+                    buildTokenKey(patient.getId()),
+                    token,
+                    jwtProperties.expirationMs(),
+                    TimeUnit.MILLISECONDS);
+        } catch (RuntimeException ex) {
+            log.error("写入 Redis 登录态失败, patientId={}", patient.getId(), ex);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "登录服务暂时不可用，请稍后重试");
+        }
         // 第三步：返回给前端
         return TokenResponse.builder()
                 .accessToken(token)

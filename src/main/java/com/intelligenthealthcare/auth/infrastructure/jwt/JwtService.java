@@ -24,7 +24,7 @@ public class JwtService {
         this.expirationMs = properties.expirationMs();
     }
 
-    /** subject 为患者主键，供 {@link com.intelligenthealthcare.auth.infrastructure.web.JwtAuthenticationFilter} 回查库。 */
+    /** subject 为患者主键，供 JWT 拦截器回查用户与令牌状态。 */
     public String createToken(long patientId) {
         Date now = new Date();
         return Jwts.builder()
