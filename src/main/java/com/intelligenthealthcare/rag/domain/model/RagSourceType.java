@@ -13,7 +13,8 @@ import lombok.Getter;
 public enum RagSourceType {
     KNOWLEDGE("KNOWLEDGE"),
     AUDIT("AUDIT"),
-    IMPORT_JOB("IMPORT_JOB");
+    IMPORT_JOB("IMPORT_JOB"),
+    DOCUMENT("DOCUMENT");
 
     @EnumValue
     @JsonValue

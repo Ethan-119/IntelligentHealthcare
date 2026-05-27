@@ -11,6 +11,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * 导入任务记录，映射 {@code import_job_record} 表。
+ */
 @TableName("import_job_record")
 @Data
 @Builder

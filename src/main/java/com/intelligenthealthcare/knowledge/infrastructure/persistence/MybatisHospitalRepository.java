@@ -30,4 +30,24 @@ public class MybatisHospitalRepository implements HospitalRepository {
         query.eq(Hospital::getDeleted, 0);
         return Optional.ofNullable(hospitalMapper.selectOne(query));
     }
+
+    @Override
+    public Optional<Hospital> findByHospitalIdAll(String hospitalId) {
+        // 不限状态，管理后台切换用
+        LambdaQueryWrapper<Hospital> query = new LambdaQueryWrapper<>();
+        query.eq(Hospital::getHospitalId, hospitalId);
+        return Optional.ofNullable(hospitalMapper.selectOne(query));
+    }
+
+    @Override
+    public List<Hospital> findAll() {
+        LambdaQueryWrapper<Hospital> query = new LambdaQueryWrapper<>();
+        query.orderByAsc(Hospital::getHospitalName);
+        return hospitalMapper.selectList(query);
+    }
+
+    @Override
+    public void update(Hospital entity) {
+        hospitalMapper.updateById(entity);
+    }
 }

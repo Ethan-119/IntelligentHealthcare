@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.intelligenthealthcare.knowledge.infrastructure.persistence.HospitalDepartmentMapper">
+
+    <select id="pageQuery" resultType="com.intelligenthealthcare.knowledge.domain.model.HospitalDepartment">
+        SELECT
+        id,
+        hospital_id,
+        department_name,
+        parent_department_name,
+        department_intro,
+        service_scope,
+        active_status,
+        deleted,
+        gender_rule,
+        age_min,
+        age_max,
+        crowd_tags_json,
+        standard_dept_code,
+        subspecialty_code,
+        is_emergency,
+        national_key_score,
+        provincial_key_score,
+        city_key_score,
+        authority_score,
+        create_time,
+        update_time
+        FROM hospital_department
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND department_name LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY department_name ASC
+    </select>
+
+</mapper>

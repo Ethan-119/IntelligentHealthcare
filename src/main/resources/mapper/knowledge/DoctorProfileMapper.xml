@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.intelligenthealthcare.knowledge.infrastructure.persistence.DoctorProfileMapper">
+
+    <select id="pageQuery" resultType="com.intelligenthealthcare.knowledge.domain.model.DoctorProfile">
+        SELECT
+        id,
+        hospital_id,
+        department_id,
+        doctor_name,
+        title,
+        specialty_text,
+        gender_rule,
+        age_min,
+        age_max,
+        crowd_tags_json,
+        authority_score,
+        academic_title_score,
+        is_expert,
+        campus_name,
+        active_status,
+        create_time,
+        update_time
+        FROM doctor_profile
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND doctor_name LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY authority_score DESC
+    </select>
+
+</mapper>

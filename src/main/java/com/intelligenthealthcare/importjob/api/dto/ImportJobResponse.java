@@ -5,6 +5,9 @@ import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * 导入任务列表/详情的 API 响应。
+ */
 @Value
 @Builder
 public class ImportJobResponse {

@@ -35,6 +35,12 @@ public class MybatisDoctorProfileRepository implements DoctorProfileRepository {
     }
 
     @Override
+    public Optional<DoctorProfile> findByIdAll(Long id) {
+        // 不限状态，管理后台切换用
+        return Optional.ofNullable(doctorProfileMapper.selectById(id));
+    }
+
+    @Override
     public List<DoctorProfile> findByDepartmentId(Long departmentId) {
         LambdaQueryWrapper<DoctorProfile> query = new LambdaQueryWrapper<>();
         query.eq(DoctorProfile::getDepartmentId, departmentId);
@@ -50,5 +56,17 @@ public class MybatisDoctorProfileRepository implements DoctorProfileRepository {
         query.eq(DoctorProfile::getActiveStatus, 1);
         query.orderByDesc(DoctorProfile::getAuthorityScore);
         return doctorProfileMapper.selectList(query);
+    }
+
+    @Override
+    public List<DoctorProfile> findAll() {
+        LambdaQueryWrapper<DoctorProfile> query = new LambdaQueryWrapper<>();
+        query.orderByDesc(DoctorProfile::getAuthorityScore);
+        return doctorProfileMapper.selectList(query);
+    }
+
+    @Override
+    public void update(DoctorProfile entity) {
+        doctorProfileMapper.updateById(entity);
     }
 }

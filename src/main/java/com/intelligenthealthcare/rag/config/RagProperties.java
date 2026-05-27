@@ -13,11 +13,50 @@ public class RagProperties {
      */
     private int embeddingDimensions = 1024;
 
+    /**
+     * 滑动窗口切分大小（字符数），默认 500。
+     */
+    private int chunkWindowSize = 500;
+
+    /**
+     * 滑动窗口重叠大小（字符数），默认 100。
+     */
+    private int chunkOverlapSize = 100;
+
+    /**
+     * 重排序候选倍数，candidateK = topK * candidateMultiplier，默认 3。
+     */
+    private int candidateMultiplier = 3;
+
     public int getEmbeddingDimensions() {
         return embeddingDimensions;
     }
 
     public void setEmbeddingDimensions(int embeddingDimensions) {
         this.embeddingDimensions = embeddingDimensions;
+    }
+
+    public int getChunkWindowSize() {
+        return chunkWindowSize;
+    }
+
+    public void setChunkWindowSize(int chunkWindowSize) {
+        this.chunkWindowSize = chunkWindowSize;
+    }
+
+    public int getChunkOverlapSize() {
+        return chunkOverlapSize;
+    }
+
+    public void setChunkOverlapSize(int chunkOverlapSize) {
+        this.chunkOverlapSize = chunkOverlapSize;
+    }
+
+    public int getCandidateMultiplier() {
+        return candidateMultiplier;
+    }
+
+    public void setCandidateMultiplier(int candidateMultiplier) {
+        this.candidateMultiplier = candidateMultiplier;
     }
 }

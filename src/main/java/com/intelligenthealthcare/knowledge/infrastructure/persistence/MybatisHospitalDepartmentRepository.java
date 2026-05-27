@@ -32,6 +32,12 @@ public class MybatisHospitalDepartmentRepository implements HospitalDepartmentRe
     }
 
     @Override
+    public Optional<HospitalDepartment> findByIdAll(Long id) {
+        // 不限状态，管理后台切换用
+        return Optional.ofNullable(hospitalDepartmentMapper.selectById(id));
+    }
+
+    @Override
     public List<HospitalDepartment> findByHospitalId(String hospitalId) {
         LambdaQueryWrapper<HospitalDepartment> query = new LambdaQueryWrapper<>();
         query.eq(HospitalDepartment::getHospitalId, hospitalId);
@@ -39,5 +45,17 @@ public class MybatisHospitalDepartmentRepository implements HospitalDepartmentRe
         query.eq(HospitalDepartment::getActiveStatus, 1);
         query.orderByAsc(HospitalDepartment::getDepartmentName);
         return hospitalDepartmentMapper.selectList(query);
+    }
+
+    @Override
+    public List<HospitalDepartment> findAll() {
+        LambdaQueryWrapper<HospitalDepartment> query = new LambdaQueryWrapper<>();
+        query.orderByAsc(HospitalDepartment::getDepartmentName);
+        return hospitalDepartmentMapper.selectList(query);
+    }
+
+    @Override
+    public void update(HospitalDepartment entity) {
+        hospitalDepartmentMapper.updateById(entity);
     }
 }

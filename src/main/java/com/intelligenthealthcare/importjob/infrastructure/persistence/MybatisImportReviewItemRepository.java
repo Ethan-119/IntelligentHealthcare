@@ -8,6 +8,9 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+/**
+ * {@link ImportReviewItemRepository} 的 MyBatis 实现。
+ */
 @Repository
 @RequiredArgsConstructor
 public class MybatisImportReviewItemRepository implements ImportReviewItemRepository {

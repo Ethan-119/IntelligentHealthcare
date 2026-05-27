@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.codec.JsonJacksonCodec;
@@ -23,6 +24,7 @@ public class RedissonConfig {
         String address = "redis://" + redisProperties.getHost() + ":" + redisProperties.getPort();
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.registerModule(new ParameterNamesModule());
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         // 嵌入 @class 类型信息，避免反序列化时 POJO 退化为 LinkedHashMap 导致 ClassCastException。
         // BasicPolymorphicTypeValidator 白名单仅允许 com.intelligenthealthcare 包下的类型，

@@ -31,6 +31,14 @@ public class MybatisDiseaseMasterRepository implements DiseaseMasterRepository {
     }
 
     @Override
+    public Optional<DiseaseMaster> findByCodeAll(String diseaseCode) {
+        // 不限 deleted 状态，管理后台切换用
+        LambdaQueryWrapper<DiseaseMaster> query = new LambdaQueryWrapper<>();
+        query.eq(DiseaseMaster::getDiseaseCode, diseaseCode);
+        return Optional.ofNullable(diseaseMasterMapper.selectOne(query));
+    }
+
+    @Override
     public List<DiseaseMaster> searchByKeyword(String keyword) {
         LambdaQueryWrapper<DiseaseMaster> query = new LambdaQueryWrapper<>();
         query.eq(DiseaseMaster::getDeleted, 0);
@@ -38,5 +46,18 @@ public class MybatisDiseaseMasterRepository implements DiseaseMasterRepository {
                 .or().like(DiseaseMaster::getSymptomKeywords, keyword));
         query.orderByAsc(DiseaseMaster::getDiseaseName);
         return diseaseMasterMapper.selectList(query);
+    }
+
+    @Override
+    public List<DiseaseMaster> findAll() {
+        // 管理后台查看全部（含已删除），按名称排序
+        LambdaQueryWrapper<DiseaseMaster> query = new LambdaQueryWrapper<>();
+        query.orderByAsc(DiseaseMaster::getDiseaseName);
+        return diseaseMasterMapper.selectList(query);
+    }
+
+    @Override
+    public void update(DiseaseMaster entity) {
+        diseaseMasterMapper.updateById(entity);
     }
 }

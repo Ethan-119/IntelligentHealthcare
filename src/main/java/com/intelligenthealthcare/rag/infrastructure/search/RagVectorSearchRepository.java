@@ -3,6 +3,8 @@ package com.intelligenthealthcare.rag.infrastructure.search;
 import com.intelligenthealthcare.rag.application.dto.RagSearchHitDto;
 import com.intelligenthealthcare.rag.domain.model.RagDocumentChunk;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -24,7 +26,11 @@ public class RagVectorSearchRepository {
     }
 
     public List<RagSearchHitDto> findNearestL2(float[] queryEmbedding, int topK) {
-        List<RagDocumentChunk> all = mongoTemplate.findAll(RagDocumentChunk.class);
+        // 检索 active!=false 的块：active=true 或缺失 active 字段（旧数据）均参与检索，
+        // 只有管理员显式下架（active=false）才跳过。
+        Query query = new Query();
+        query.addCriteria(Criteria.where("active").ne(false));
+        List<RagDocumentChunk> all = mongoTemplate.find(query, RagDocumentChunk.class);
         if (all.isEmpty()) {
             return Collections.emptyList();
         }

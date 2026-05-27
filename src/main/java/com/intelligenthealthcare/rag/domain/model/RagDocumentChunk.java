@@ -38,4 +38,12 @@ public class RagDocumentChunk {
 
     @Field("embedding")
     private float[] embedding;
+
+    /**
+     * 是否启用：false 时向量检索和热缓存均跳过该块，相当于"下架"。
+     * 管理员可随时在 MongoDB 中修改此字段。
+     */
+    @Field("active")
+    @Builder.Default
+    private boolean active = true;
 }

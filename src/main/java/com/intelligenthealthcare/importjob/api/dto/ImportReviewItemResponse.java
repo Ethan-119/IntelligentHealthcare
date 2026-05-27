@@ -7,6 +7,9 @@ import java.util.List;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * 导入待审核项的 API 响应。
+ */
 @Value
 @Builder
 public class ImportReviewItemResponse {

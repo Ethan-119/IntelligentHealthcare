@@ -7,6 +7,9 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+/**
+ * {@link ImportFailureLogRepository} 的 MyBatis 实现。
+ */
 @Repository
 @RequiredArgsConstructor
 public class MybatisImportFailureLogRepository implements ImportFailureLogRepository {

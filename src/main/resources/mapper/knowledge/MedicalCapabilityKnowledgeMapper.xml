@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.intelligenthealthcare.knowledge.infrastructure.persistence.MedicalCapabilityKnowledgeMapper">
+
+    <select id="pageQuery" resultType="com.intelligenthealthcare.knowledge.domain.model.MedicalCapabilityKnowledge">
+        SELECT
+        id,
+        capability_code,
+        capability_name,
+        capability_type,
+        parent_code,
+        standard_dept_code,
+        aliases_json,
+        gender_rule,
+        age_min,
+        age_max,
+        crowd_tags_json,
+        pathway_tags_json,
+        active_status,
+        create_time,
+        update_time
+        FROM medical_capability_catalog
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND capability_name LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY capability_name ASC
+    </select>
+
+</mapper>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.intelligenthealthcare.knowledge.infrastructure.persistence.HospitalMapper">
+
+    <select id="pageQuery" resultType="com.intelligenthealthcare.knowledge.domain.model.Hospital">
+        SELECT
+        id,
+        hospital_id,
+        hospital_name,
+        city,
+        district_name,
+        latitude,
+        longitude,
+        hospital_level,
+        is_emergency,
+        authority_score,
+        active_status,
+        deleted,
+        create_time,
+        update_time
+        FROM hospital
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND hospital_name LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY hospital_name ASC
+    </select>
+
+</mapper>

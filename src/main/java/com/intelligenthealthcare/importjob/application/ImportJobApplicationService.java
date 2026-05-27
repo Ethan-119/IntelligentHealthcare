@@ -48,6 +48,7 @@ public class ImportJobApplicationService {
 
     // 单次导入作为一个事务：要么全部完成（job + failure logs + review items + 进度更新），
     // 要么整体回滚，避免中途崩溃留下半截脏数据。
+    //创建文件上传读取内容，根据文件DatasetType来判断是哪个类型的
     @Transactional
     public ImportJobRecord createAndRunImport(MultipartFile file, String datasetTypeRaw) {
         if (!StringUtils.hasText(datasetTypeRaw)) {
@@ -67,7 +68,7 @@ public class ImportJobApplicationService {
 
         List<ImportTableRow> rows;
         try {
-            rows = ImportFileTableReader.read(file);
+            rows = ImportFileTableReader.read(file);//完整内容
         } catch (IOException e) {
             importJobRecordRepository.updateAsFailed(jobId, "无法读取文件：" + e.getMessage());
             return mustGetJob(jobId);
@@ -76,7 +77,7 @@ public class ImportJobApplicationService {
                     jobId, e.getMessage() != null ? e.getMessage() : "无法解析文件");
             return mustGetJob(jobId);
         }
-
+         //用于在后续的业务处理中统计成功、失败的数量等信息
         ImportJobProgress progress = new ImportJobProgress();
         if (DatasetTypes.DISEASE_MASTER.equals(datasetType)) {
             runDiseaseMasterImport(jobId, rows, progress);
@@ -86,7 +87,7 @@ public class ImportJobApplicationService {
             importJobRecordRepository.updateAsFailed(jobId, "未实现的 datasetType：" + datasetType);
             return mustGetJob(jobId);
         }
-
+        // 当上述具体的导入业务执行完毕后，调用该方法统一收尾（如最终更新数据库中的任务状态为成功/部分成功，并保存最终的进度统计）
         finishJobWithProgress(jobId, progress);
         // 管理员导入写库成功后，按“先更新数据库、再删除缓存”策略失效知识库缓存。
         if (progress.getSuccessCount() > 0) {
@@ -94,7 +95,7 @@ public class ImportJobApplicationService {
         }
         return mustGetJob(jobId);
     }
-
+   //执行疾病主插入处理每一行，执行策略
     private void runDiseaseMasterImport(long jobId, List<ImportTableRow> rows, ImportJobProgress progress) {
         for (int i = 0; i < rows.size(); i++) {
             ImportTableRow tableRow = rows.get(i);
@@ -114,7 +115,7 @@ public class ImportJobApplicationService {
             persistDiseaseMasterLineOutcome(jobId, tableRow, progress, decided);
         }
     }
-
+    //根据decided具体的执行结果执行具体操作
     private void persistDiseaseMasterLineOutcome(
             long jobId, ImportTableRow tableRow, ImportJobProgress progress, ImportLineProcessResult decided) {
         if (decided.getOutcome() == ImportLineProcessResult.Outcome.INSERT_DISEASE_MASTER) {

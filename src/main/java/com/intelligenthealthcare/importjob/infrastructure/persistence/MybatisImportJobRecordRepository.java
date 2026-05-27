@@ -10,6 +10,9 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+/**
+ * {@link ImportJobRecordRepository} 的 MyBatis 实现。
+ */
 @Repository
 @RequiredArgsConstructor
 public class MybatisImportJobRecordRepository implements ImportJobRecordRepository {

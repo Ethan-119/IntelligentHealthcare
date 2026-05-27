@@ -59,8 +59,12 @@ public class MedicalDecisionTools {
     public String recommendHospital(
             @ToolParam(description = "城市，如 武汉市") String city,
             @ToolParam(description = "区域，如 江汉区，可为空") String area,
-            @ToolParam(description = "症状描述") String symptomSummary) {
-        return recommendHospital(city, area, symptomSummary, null, null);
+            @ToolParam(description = "症状描述") String symptomSummary,
+            @ToolParam(description = "用户纬度，可选，用于计算距离") Double userLat,
+            @ToolParam(description = "用户经度，可选，用于计算距离") Double userLon) {
+        BigDecimal lat = userLat != null ? BigDecimal.valueOf(userLat) : null;
+        BigDecimal lon = userLon != null ? BigDecimal.valueOf(userLon) : null;
+        return recommendHospital(city, area, symptomSummary, lat, lon);
     }
 
     // 基于城市/区域和症状推荐医院，优先按用户坐标（源自浏览器 Geolocation API）计算
@@ -96,6 +100,18 @@ public class MedicalDecisionTools {
         }
         sb.append("\n- 说明：该推荐基于当前症状关键词和就近规则，非最终临床诊断。");
         return sb.toString();
+    }
+
+    @Tool(description = "基于城市/区域和症状描述推荐合适的医生")
+    public String recommendDoctor(
+            @ToolParam(description = "城市，如 武汉市") String city,
+            @ToolParam(description = "区域，如 江汉区，可为空") String area,
+            @ToolParam(description = "症状描述") String symptomSummary,
+            @ToolParam(description = "用户纬度，可选") Double userLat,
+            @ToolParam(description = "用户经度，可选") Double userLon) {
+        BigDecimal lat = userLat != null ? BigDecimal.valueOf(userLat) : null;
+        BigDecimal lon = userLon != null ? BigDecimal.valueOf(userLon) : null;
+        return recommendDoctor(city, area, symptomSummary, lat, lon, 3);
     }
 
     public String recommendDoctor(

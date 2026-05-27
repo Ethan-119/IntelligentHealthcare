@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.intelligenthealthcare.knowledge.infrastructure.persistence.DiseaseMasterMapper">
+
+    <select id="pageQuery" resultType="com.intelligenthealthcare.knowledge.domain.model.DiseaseMaster">
+        SELECT
+        id,
+        disease_code,
+        disease_name,
+        symptom_keywords,
+        gender_rule,
+        age_min,
+        age_max,
+        urgency_level,
+        review_status,
+        deleted,
+        create_time,
+        update_time
+        FROM disease_master
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (disease_name LIKE CONCAT('%', #{keyword}, '%')
+                OR symptom_keywords LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY disease_name ASC
+    </select>
+
+</mapper>

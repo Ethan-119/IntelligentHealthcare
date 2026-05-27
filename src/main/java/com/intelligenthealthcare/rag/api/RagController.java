@@ -7,6 +7,7 @@ import com.intelligenthealthcare.rag.api.dto.RagSearchResponse;
 import com.intelligenthealthcare.rag.application.RagIngestCommand;
 import com.intelligenthealthcare.rag.application.RagIngestionService;
 import com.intelligenthealthcare.rag.application.RagQueryService;
+import com.intelligenthealthcare.rag.config.RagProperties;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +22,7 @@ public class RagController {
 
     private final RagIngestionService ingestionService;
     private final RagQueryService queryService;
+    private final RagProperties ragProperties;
 
     @PostMapping("/ingest")
     public RagIngestResponse ingest(@Valid @RequestBody RagIngestRequest request) {
@@ -37,7 +39,10 @@ public class RagController {
 
     @PostMapping("/search")
     public RagSearchResponse search(@Valid @RequestBody RagSearchRequest request) {
-        var hits = queryService.search(request.getQuery(), request.getTopK());
+        int ck = request.getCandidateK() > 0
+                ? request.getCandidateK()
+                : request.getTopK() * ragProperties.getCandidateMultiplier();
+        var hits = queryService.search(request.getQuery(), request.getTopK(), ck);
         var items =
                 hits.stream()
                         .map(

@@ -4,6 +4,7 @@ import com.intelligenthealthcare.rag.application.dto.RagSearchHitDto;
 import com.intelligenthealthcare.rag.config.RagProperties;
 import com.intelligenthealthcare.rag.domain.model.RagDocumentChunk;
 import com.intelligenthealthcare.rag.infrastructure.embedding.EmbeddingUtil;
+import com.intelligenthealthcare.rag.infrastructure.rerank.RerankService;
 import com.intelligenthealthcare.rag.infrastructure.search.RagVectorSearchRepository;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,19 +30,33 @@ public class RagQueryService {
     private final RagVectorSearchRepository vectorSearchRepository;
     private final RagProperties ragProperties;
     private final RedissonClient redissonClient;
+    private final RerankService rerankService;
 
     public RagQueryService(
             EmbeddingUtil embeddingUtil,
             RagVectorSearchRepository vectorSearchRepository,
             RagProperties ragProperties,
-            RedissonClient redissonClient) {
+            RedissonClient redissonClient,
+            RerankService rerankService) {
         this.embeddingUtil = embeddingUtil;
         this.vectorSearchRepository = vectorSearchRepository;
         this.ragProperties = ragProperties;
         this.redissonClient = redissonClient;
+        this.rerankService = rerankService;
     }
 
     public List<RagSearchHitDto> search(String naturalLanguageQuery, int topK) {
+        return search(naturalLanguageQuery, topK, 0);
+    }
+
+    /**
+     * 两阶段检索：先向量召回 candidateK 条，再经重排序模型精排返回 topK 条。
+     *
+     * @param naturalLanguageQuery 查询文本
+     * @param topK                 最终返回条数
+     * @param candidateK           候选条数，0 或 <= topK 时不重排序
+     */
+    public List<RagSearchHitDto> search(String naturalLanguageQuery, int topK, int candidateK) {
         if (!StringUtils.hasText(naturalLanguageQuery)) {
             return List.of();
         }
@@ -50,13 +65,55 @@ public class RagQueryService {
             throw new IllegalStateException(
                     "查询嵌入维数 " + q.length + " 与 app.rag.embedding-dimensions=" + ragProperties.getEmbeddingDimensions() + " 不一致");
         }
-        List<RagSearchHitDto> hotCacheHits = searchFromHotCache(q, topK);
+
+        // 计算实际召回数量
+        int effectiveCandidateK = candidateK > topK ? candidateK : topK; //真实返回个数，只有当超过了上限才返回上限
+
+        // 尝试热缓存
+        List<RagSearchHitDto> hotCacheHits = searchFromHotCache(q, effectiveCandidateK);
         if (!hotCacheHits.isEmpty()) {
-            // 热缓存命中时直接返回，避免每次都访问向量库。
-            return hotCacheHits;
+            return rerankIfNeeded(naturalLanguageQuery, hotCacheHits, topK, effectiveCandidateK);
         }
-        // 缓存未命中时回落到向量库（Mongo）近邻检索。
-        return vectorSearchRepository.findNearestL2(q, topK);
+
+        // 向量库检索
+        List<RagSearchHitDto> candidates = vectorSearchRepository.findNearestL2(q, effectiveCandidateK);
+        return rerankIfNeeded(naturalLanguageQuery, candidates, topK, effectiveCandidateK);
+    }
+
+    /**
+     * 如果候选数大于最终返回数，调用重排序模型精排；否则直接截断返回。
+     */
+    private List<RagSearchHitDto> rerankIfNeeded(String query, List<RagSearchHitDto> candidates, int topK, int effectiveCandidateK) {
+        if (candidates.size() <= topK || effectiveCandidateK <= topK) {
+            // 候选不足，直接截断
+            if (candidates.size() <= topK) {
+                return candidates;
+            }
+            return candidates.subList(0, topK);
+        }
+
+        // 提取候选文本
+        List<String> candidateTexts = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            candidateTexts.add(candidates.get(i).content());
+        }
+
+        // 调用重排序
+        List<Integer> rerankedIndices = rerankService.rerank(query, candidateTexts, topK);
+        if (rerankedIndices == null || rerankedIndices.isEmpty()) {
+            // 重排序失败，退回到 L2 排序的前 topK 条
+            return candidates.subList(0, topK);
+        }
+
+        // 按重排序结果组装
+        List<RagSearchHitDto> result = new ArrayList<>();
+        for (int i = 0; i < rerankedIndices.size(); i++) {
+            int idx = rerankedIndices.get(i);
+            if (idx >= 0 && idx < candidates.size()) {
+                result.add(candidates.get(idx));
+            }
+        }
+        return result;
     }
 
     private List<RagSearchHitDto> searchFromHotCache(float[] queryEmbedding, int topK) {
@@ -68,8 +125,12 @@ public class RagQueryService {
 
         List<ScoredChunk> scored = new ArrayList<>();
         for (int i = 0; i < chunks.size(); i++) {
-            RagDocumentChunk chunk = chunks.get(i);
-            float[] embedding = chunk.getEmbedding();
+            RagDocumentChunk chunk = chunks.get(i);//获取对象
+            // 跳过已下架（active=false）的块
+            if (!chunk.isActive()) {
+                continue;
+            }
+            float[] embedding = chunk.getEmbedding();//获取该对象的向量信息
             if (embedding == null || embedding.length != queryEmbedding.length) {
                 // 向量维度不一致的脏数据直接跳过，避免污染排序结果。
                 continue;
@@ -81,6 +142,7 @@ public class RagQueryService {
             return Collections.emptyList();
         }
 
+        //初次筛选
         scored.sort(new Comparator<ScoredChunk>() {
             @Override
             public int compare(ScoredChunk a, ScoredChunk b) {

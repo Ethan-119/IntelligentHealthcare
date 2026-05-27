@@ -9,6 +9,9 @@ import com.intelligenthealthcare.knowledge.infrastructure.persistence.DiseaseMas
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+/**
+ * {@link KnowledgeImportRepository} 的 MyBatis 实现，对接 knowledge 限界上下文的 Mapper。
+ */
 @Repository
 @RequiredArgsConstructor
 public class MybatisKnowledgeImportRepository implements KnowledgeImportRepository {

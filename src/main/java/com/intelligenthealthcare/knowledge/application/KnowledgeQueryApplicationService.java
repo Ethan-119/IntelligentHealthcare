@@ -1,5 +1,7 @@
 package com.intelligenthealthcare.knowledge.application;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.intelligenthealthcare.knowledge.domain.model.DepartmentCapabilityRel;
 import com.intelligenthealthcare.knowledge.domain.model.DiseaseAlias;
 import com.intelligenthealthcare.knowledge.domain.model.DiseaseCapabilityRel;
@@ -35,6 +37,10 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 读和热数据预热
+ * 写入侧RagIngestionService和ImportJobApplicationService
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -197,12 +203,16 @@ public class KnowledgeQueryApplicationService {
         return new HotspotWarmupResult(normalizedScopes, warmedEntries);
     }
 
+    /**
+     *lazy加载
+     */
+
     private <T> T getObjectCache(String mapName, String key, long ttlMinutes, Supplier<T> loader) {
-        RMapCache<String, Object> cache = redissonClient.getMapCache(mapName);
-        Object raw = cache.get(key);
+        RMapCache<String, Object> cache = redissonClient.getMapCache(mapName);//一级key
+        Object raw = cache.get(key);//二级key，拿到value
         long now = System.currentTimeMillis();
 
-        CacheEnvelope envelope = toCacheEnvelope(raw);
+        CacheEnvelope envelope = toCacheEnvelope(raw);//解析
         if (envelope != null) {
             T payload = castPayload(envelope.getPayload());
             if (payload == null) {
@@ -226,7 +236,7 @@ public class KnowledgeQueryApplicationService {
         }
 
         // 冷启动或完全无缓存：同步回源一次，确保首个请求拿到数据。
-        T loaded = loader.get();
+        T loaded = loader.get();//老实执行查询数据库的操作
         if (loaded != null) {
             putEnvelope(cache, key, loaded, ttlMinutes);
         }
@@ -236,7 +246,7 @@ public class KnowledgeQueryApplicationService {
     private <T> List<T> getListCache(String mapName, String key, long ttlMinutes, Supplier<List<T>> loader) {
         List<T> cached = getObjectCache(mapName, key, ttlMinutes, loader);
         if (cached == null) {
-            return Collections.emptyList();
+            return Collections.emptyList();//null对象转为空集合，避免空指针
         }
         return cached;
     }
@@ -245,7 +255,7 @@ public class KnowledgeQueryApplicationService {
         String lockKey = REFRESH_LOCK_PREFIX + mapName + ":" + key;
         RLock lock = redissonClient.getLock(lockKey);
         try {
-            boolean locked = lock.tryLock(0, REFRESH_LOCK_LEASE_SECONDS, TimeUnit.SECONDS);
+            boolean locked = lock.tryLock(0, REFRESH_LOCK_LEASE_SECONDS, TimeUnit.SECONDS);//不用leasttime，也可以交给看门狗
             if (!locked) {
                 return;
             }
@@ -468,7 +478,11 @@ public class KnowledgeQueryApplicationService {
         private final long logicalExpireAtEpochMs;
         private final long lastRefreshEpochMs;
 
-        private CacheEnvelope(Object payload, long logicalExpireAtEpochMs, long lastRefreshEpochMs) {
+        @JsonCreator
+        private CacheEnvelope(
+                @JsonProperty("payload") Object payload,
+                @JsonProperty("logicalExpireAtEpochMs") long logicalExpireAtEpochMs,
+                @JsonProperty("lastRefreshEpochMs") long lastRefreshEpochMs) {
             this.payload = payload;
             this.logicalExpireAtEpochMs = logicalExpireAtEpochMs;
             this.lastRefreshEpochMs = lastRefreshEpochMs;

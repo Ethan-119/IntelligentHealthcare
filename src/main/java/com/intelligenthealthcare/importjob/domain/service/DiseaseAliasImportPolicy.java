@@ -15,6 +15,9 @@ public final class DiseaseAliasImportPolicy {
 
     private DiseaseAliasImportPolicy() {}
 
+    /**
+     * 从表行解析为待入库的 {@link DiseaseAlias}；失败时 errorMessage 非空。
+     */
     public static ParsedRow parse(ImportTableRow row) {
         if (row == null) {
             return ParsedRow.failure("行数据为空");
@@ -38,6 +41,9 @@ public final class DiseaseAliasImportPolicy {
         return ParsedRow.ok(ready);
     }
 
+    /**
+     * 根据疾病编码是否存在、别名是否已重复，决定本行是插入、跳过或失败。
+     */
     public static ImportLineProcessResult evaluate(
             DiseaseAlias rowAsEntity, boolean diseaseExists, boolean aliasAlreadyExists) {
         if (rowAsEntity == null) {
@@ -71,6 +77,7 @@ public final class DiseaseAliasImportPolicy {
         return t;
     }
 
+    /** 解析行结果，不单独成 domain.model 文件。 */
     @Getter
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static final class ParsedRow {
