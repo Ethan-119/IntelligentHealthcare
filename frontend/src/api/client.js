@@ -330,7 +330,8 @@ export async function aiAnalyzeStream(
       if (eventType === "status") {
         onStatus?.(data);
       } else if (eventType === "chunk") {
-        onChunk?.(data);
+        // 过滤 UTF-8 解码失败产生的替换字符 (U+FFFD)，避免前端显示乱码
+        onChunk?.(data.replace(/\uFFFD/g, ""));
         // 给浏览器一次绘制机会，避免大量 chunk 在同一任务中被批处理成“看起来阻塞”
         if (typeof requestAnimationFrame === "function") {
           await new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -421,6 +422,147 @@ export async function addKnowledgeHotspots(scopes = []) {
   return request("/admin/knowledge/cache/hotspots/add", {
     method: "POST",
     body: JSON.stringify({ scopes }),
+  });
+}
+
+/* ====== Admin Documents ====== */
+
+export async function uploadDocument(file) {
+  const token = getToken();
+  const headers = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/admin/documents/upload`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (res.status === 401) {
+    clearToken();
+    clearUser();
+    window.location.href = "/auth";
+    throw new ApiError("登录状态已失效，请重新登录。", 401, {
+      path: "/admin/documents/upload",
+    });
+  }
+
+  if (!res.ok) {
+    const body = await res.text();
+    let backendMessage = "";
+    try {
+      const json = JSON.parse(body);
+      backendMessage = json.message || json.error || body;
+    } catch (_e) {
+      backendMessage = body;
+    }
+    const message = buildFriendlyErrorMessage(
+      "/admin/documents/upload",
+      res.status,
+      backendMessage
+    );
+    throw new ApiError(message, res.status, {
+      path: "/admin/documents/upload",
+      backendMessage,
+    });
+  }
+
+  return res.json();
+}
+
+export async function listDocuments() {
+  return request("/admin/documents");
+}
+
+// 下架文档：所有块不再参与检索
+export async function deactivateDocument(documentName) {
+  return request(`/admin/documents/${encodeURIComponent(documentName)}/deactivate`, {
+    method: "PUT",
+  });
+}
+
+// 上架文档：恢复检索
+export async function activateDocument(documentName) {
+  return request(`/admin/documents/${encodeURIComponent(documentName)}/activate`, {
+    method: "PUT",
+  });
+}
+
+/* ====== Admin Import Jobs ====== */
+
+// 上传结构化数据文件（Excel/CSV）导入 PostgreSQL 业务表
+export async function uploadImportJob(file, datasetType) {
+  const token = getToken();
+  const headers = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("datasetType", datasetType);
+
+  const res = await fetch(`${BASE_URL}/admin/import/jobs`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (res.status === 401) {
+    clearToken();
+    clearUser();
+    window.location.href = "/auth";
+    throw new ApiError("登录状态已失效，请重新登录。", 401, {
+      path: "/admin/import/jobs",
+    });
+  }
+
+  if (!res.ok) {
+    const body = await res.text();
+    let backendMessage = "";
+    try {
+      const json = JSON.parse(body);
+      backendMessage = json.message || json.error || body;
+    } catch (_e) {
+      backendMessage = body;
+    }
+    const message = buildFriendlyErrorMessage(
+      "/admin/import/jobs",
+      res.status,
+      backendMessage
+    );
+    throw new ApiError(message, res.status, {
+      path: "/admin/import/jobs",
+      backendMessage,
+    });
+  }
+
+  return res.json();
+}
+
+// 获取最近的导入任务列表
+export async function listImportJobs() {
+  return request("/admin/import/jobs");
+}
+
+/* ====== Admin Knowledge Data ====== */
+
+// 按类型分页查询 Knowledge 数据
+export async function listKnowledgeDataByType(type, page, size, keyword) {
+  var params = "page=" + (page || 1) + "&size=" + (size || 20);
+  if (keyword) {
+    params += "&keyword=" + encodeURIComponent(keyword);
+  }
+  return request(`/admin/knowledge/data/${encodeURIComponent(type)}?${params}`);
+}
+
+// 切换单条 Knowledge 数据的热点状态
+export async function toggleKnowledgeData(type, id) {
+  return request(`/admin/knowledge/data/${encodeURIComponent(type)}/${encodeURIComponent(id)}/toggle`, {
+    method: "PUT",
   });
 }
 

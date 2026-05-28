@@ -72,6 +72,7 @@ function cleanInlineMarkdown(text) {
     .replace(/`/g, "")
     .replace(/[✅⚠️❌📌➡️▪️•◆■□★☆]/g, "")
     .replace(/<br\s*\/?>/gi, "；")
+    .replace(/\uFFFD/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
