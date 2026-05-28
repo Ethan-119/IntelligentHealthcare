@@ -31,18 +31,21 @@ public class RagQueryService {
     private final RagProperties ragProperties;
     private final RedissonClient redissonClient;
     private final RerankService rerankService;
+    private final RagMetricsService metricsService;
 
     public RagQueryService(
             EmbeddingUtil embeddingUtil,
             RagVectorSearchRepository vectorSearchRepository,
             RagProperties ragProperties,
             RedissonClient redissonClient,
-            RerankService rerankService) {
+            RerankService rerankService,
+            RagMetricsService metricsService) {
         this.embeddingUtil = embeddingUtil;
         this.vectorSearchRepository = vectorSearchRepository;
         this.ragProperties = ragProperties;
         this.redissonClient = redissonClient;
         this.rerankService = rerankService;
+        this.metricsService = metricsService;
     }
 
     public List<RagSearchHitDto> search(String naturalLanguageQuery, int topK) {
@@ -60,32 +63,57 @@ public class RagQueryService {
         if (!StringUtils.hasText(naturalLanguageQuery)) {
             return List.of();
         }
+
+        RagMetricsService.RagTimer timer = metricsService.start(naturalLanguageQuery.trim(), topK, candidateK);
+
+        // 1. Embedding
+        long embedStart = System.nanoTime();
         float[] q = embeddingUtil.embed(naturalLanguageQuery.trim());
+        long embedMs = (System.nanoTime() - embedStart) / 1_000_000;
+        timer.embed(embedMs, q.length);
+
         if (q.length != ragProperties.getEmbeddingDimensions()) {
             throw new IllegalStateException(
                     "查询嵌入维数 " + q.length + " 与 app.rag.embedding-dimensions=" + ragProperties.getEmbeddingDimensions() + " 不一致");
         }
 
         // 计算实际召回数量
-        int effectiveCandidateK = candidateK > topK ? candidateK : topK; //真实返回个数，只有当超过了上限才返回上限
+        int effectiveCandidateK = candidateK > topK ? candidateK : topK;
 
-        // 尝试热缓存
+        // 2. 检索（热缓存 / 向量库）
+        long searchStart = System.nanoTime();
         List<RagSearchHitDto> hotCacheHits = searchFromHotCache(q, effectiveCandidateK);
+        long searchMs = (System.nanoTime() - searchStart) / 1_000_000;
+
+        List<RagSearchHitDto> candidates;
         if (!hotCacheHits.isEmpty()) {
-            return rerankIfNeeded(naturalLanguageQuery, hotCacheHits, topK, effectiveCandidateK);
+            timer.search(searchMs, hotCacheHits.size(), true);
+            candidates = hotCacheHits;
+        } else {
+            // 热缓存未命中，走向量检索
+            searchStart = System.nanoTime();
+            candidates = vectorSearchRepository.findNearestL2(q, effectiveCandidateK);
+            searchMs = (System.nanoTime() - searchStart) / 1_000_000;
+            timer.search(searchMs, candidates.size(), false);
         }
 
-        // 向量库检索
-        List<RagSearchHitDto> candidates = vectorSearchRepository.findNearestL2(q, effectiveCandidateK);
-        return rerankIfNeeded(naturalLanguageQuery, candidates, topK, effectiveCandidateK);
+        // 3. 重排序
+        long rerankStart = System.nanoTime();
+        List<RagSearchHitDto> result = rerankIfNeeded(naturalLanguageQuery, candidates, topK, effectiveCandidateK, timer, rerankStart);
+
+        timer.done();
+        return result;
     }
 
     /**
      * 如果候选数大于最终返回数，调用重排序模型精排；否则直接截断返回。
      */
-    private List<RagSearchHitDto> rerankIfNeeded(String query, List<RagSearchHitDto> candidates, int topK, int effectiveCandidateK) {
+    private List<RagSearchHitDto> rerankIfNeeded(String query, List<RagSearchHitDto> candidates, int topK,
+                                                  int effectiveCandidateK,
+                                                  RagMetricsService.RagTimer timer, long rerankStartNanos) {
         if (candidates.size() <= topK || effectiveCandidateK <= topK) {
-            // 候选不足，直接截断
+            // 候选不足，无需重排序
+            timer.rerank(0, candidates.size(), Math.min(candidates.size(), topK), false);
             if (candidates.size() <= topK) {
                 return candidates;
             }
@@ -100,8 +128,11 @@ public class RagQueryService {
 
         // 调用重排序
         List<Integer> rerankedIndices = rerankService.rerank(query, candidateTexts, topK);
+        long rerankMs = (System.nanoTime() - rerankStartNanos) / 1_000_000;
+
         if (rerankedIndices == null || rerankedIndices.isEmpty()) {
             // 重排序失败，退回到 L2 排序的前 topK 条
+            timer.rerank(rerankMs, candidates.size(), topK, true);
             return candidates.subList(0, topK);
         }
 
@@ -113,6 +144,7 @@ public class RagQueryService {
                 result.add(candidates.get(idx));
             }
         }
+        timer.rerank(rerankMs, candidates.size(), result.size(), false);
         return result;
     }
 
