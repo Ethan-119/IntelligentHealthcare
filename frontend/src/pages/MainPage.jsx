@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import {
   aiAnalyze,
   aiAnalyzeStream,
+  createSession,
+  deleteSession,
   getAiSessionTurns,
   getMyProfile,
   getUser,
@@ -820,9 +822,32 @@ export default function MainPage() {
     }
   };
 
-  const handleNewConversation = () => {
-    setActiveSessionId("");
-    setActiveTurns([]);
+  const handleNewConversation = async () => {
+    try {
+      const data = await createSession();
+      if (data?.sessionId) {
+        await refreshSessions(true, data.sessionId);
+        setActiveSessionId(data.sessionId);
+        setActiveTurns([]);
+      }
+    } catch (e) {
+      alert(e.message || "创建新分组失败");
+    }
+  };
+
+  const handleDeleteSession = async (sessionId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("确定要删除该分组吗？删除后无法恢复。")) return;
+    try {
+      await deleteSession(sessionId);
+      if (sessionId === activeSessionId) {
+        setActiveSessionId("");
+        setActiveTurns([]);
+      }
+      await refreshSessions(true);
+    } catch (err) {
+      alert(err.message || "删除分组失败");
+    }
   };
 
   const handleLogout = () => {
@@ -963,7 +988,7 @@ export default function MainPage() {
                     borderLeft: item.sessionId === activeSessionId ? "3px solid #2563eb" : "3px solid transparent",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 4 }}>
                     <div
                       style={{
                         fontSize: 14,
@@ -972,26 +997,47 @@ export default function MainPage() {
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
                         marginBottom: 4,
+                        flex: 1,
+                        minWidth: 0,
                       }}
                       title={item.title || "新会话"}
                     >
                       {item.title || "新会话"}
                     </div>
-                    {item.sessionId === activeSessionId && (
-                      <span
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                      {item.sessionId === activeSessionId && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "#1d4ed8",
+                            background: "#dbeafe",
+                            borderRadius: 999,
+                            padding: "2px 6px",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          当前
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => handleDeleteSession(item.sessionId, e)}
+                        title="删除分组"
                         style={{
-                          flexShrink: 0,
-                          fontSize: 11,
-                          color: "#1d4ed8",
-                          background: "#dbeafe",
-                          borderRadius: 999,
-                          padding: "2px 6px",
-                          lineHeight: 1.2,
+                          border: "none",
+                          background: "transparent",
+                          color: "#9ca3af",
+                          fontSize: 16,
+                          lineHeight: 1,
+                          cursor: "pointer",
+                          padding: "0 2px",
+                          borderRadius: 4,
                         }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "#fee2e2"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = "#9ca3af"; e.currentTarget.style.background = "transparent"; }}
                       >
-                        当前
-                      </span>
-                    )}
+                        ×
+                      </button>
+                    </div>
                   </div>
                   <div style={{ fontSize: 12, color: "#9ca3af" }}>
                     {formatDateTime(item.updateTime)} · 第{item.askRound || 0}轮

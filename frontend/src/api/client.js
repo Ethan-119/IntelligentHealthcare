@@ -400,6 +400,40 @@ export async function listAiSessions() {
   return request("/ai/sessions");
 }
 
+export async function createSession() {
+  return request("/ai/sessions", { method: "POST" });
+}
+
+export async function deleteSession(sessionId) {
+  const token = getToken();
+  const headers = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${BASE_URL}/ai/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (res.status === 401) {
+    clearToken();
+    clearUser();
+    window.location.href = "/auth";
+    throw new ApiError("登录状态已失效，请重新登录。", 401, { path: "/ai/sessions" });
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    let backendMessage = "";
+    try {
+      const json = JSON.parse(body);
+      backendMessage = json.message || json.error || body;
+    } catch {
+      backendMessage = body;
+    }
+    const message = buildFriendlyErrorMessage("/ai/sessions", res.status, backendMessage);
+    throw new ApiError(message, res.status, { path: "/ai/sessions", backendMessage });
+  }
+}
+
 export async function getAiSessionTurns(sessionId) {
   return request(`/ai/sessions/${encodeURIComponent(sessionId)}/turns`);
 }
