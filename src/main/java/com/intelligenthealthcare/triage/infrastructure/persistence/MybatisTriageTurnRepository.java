@@ -44,4 +44,11 @@ public class MybatisTriageTurnRepository implements TriageTurnRepository {
     public void save(TriageTurn turn) {
         triageTurnMapper.insert(turn);
     }
+
+    @Override
+    public void deleteBySessionId(String sessionId) {
+        LambdaQueryWrapper<TriageTurn> query = new LambdaQueryWrapper<>();
+        query.eq(TriageTurn::getSessionId, sessionId);
+        triageTurnMapper.delete(query);
+    }
 }

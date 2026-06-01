@@ -156,17 +156,19 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         if (!StringUtils.hasText(content) && !hasImages) {
             return new AiAnalyzeResult(resolveSessionId(sessionId), "输入内容为空，无法分析。");
         }
-        if (!isMedicalQuery(content, hasImages)) {
-            return new AiAnalyzeResult(resolveSessionId(sessionId), NON_MEDICAL_REPLY, null);
-        }
-
         String resolvedSessionId = resolveSessionId(sessionId);
         String userId = principal.getId().toString();
         TriageSession triageSession = getOrCreateSession(userId, resolvedSessionId);
+        List<TriageTurn> historyTurns = listRecentTurns(resolvedSessionId);
+
+        // 新会话（无历史）才做医疗门禁；已有医疗对话的会话直接放行，避免上下文补充信息被误拦截
+        if (historyTurns.isEmpty() && !isMedicalQuery(content, hasImages)) {
+            return new AiAnalyzeResult(resolvedSessionId, NON_MEDICAL_REPLY, null);
+        }
+
         applyUserLocation(triageSession, latitude, longitude);
         Patient currentPatient = autoBackfillProfileIfMissing(principal.getId(), content);
         int turnNo = nextTurnNo(triageSession.getAskRound());
-        List<TriageTurn> historyTurns = listRecentTurns(resolvedSessionId);
 
         // MCP 集成：通过 MCP ImageVisionTools 调用 DashScope 多模态模型分析图片
         String imageAnalysis = null;
@@ -265,7 +267,13 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                     emitter.complete();
                     return;
                 }
-                if (!isMedicalQuery(content, hasImages)) {
+                // --- Phase 2: session & user setup ---
+                String userId = principal.getId().toString();
+                TriageSession triageSession = getOrCreateSession(userId, resolvedSessionId);
+                List<TriageTurn> historyTurns = listRecentTurns(resolvedSessionId);
+
+                // 新会话（无历史）才做医疗门禁；已有医疗对话的会话直接放行，避免上下文补充信息被误拦截
+                if (historyTurns.isEmpty() && !isMedicalQuery(content, hasImages)) {
                     safeSend(emitter, statusEvent(NON_MEDICAL_REPLY));
                     safeSend(emitter, chunkEvent(NON_MEDICAL_REPLY));
                     safeSend(emitter, doneEvent(resolvedSessionId, null));
@@ -273,13 +281,9 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                     return;
                 }
 
-                // --- Phase 2: session & user setup ---
-                String userId = principal.getId().toString();
-                TriageSession triageSession = getOrCreateSession(userId, resolvedSessionId);
                 applyUserLocation(triageSession, latitude, longitude);
                 Patient currentPatient = autoBackfillProfileIfMissing(principal.getId(), content);
                 int turnNo = nextTurnNo(triageSession.getAskRound());
-                List<TriageTurn> historyTurns = listRecentTurns(resolvedSessionId);
                 String normalizedContent = normalizeKey(content);
 
                 // --- Phase 3: MCP image analysis ---
@@ -403,6 +407,40 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
         return new AiSessionConversation(sessionId.trim(), items);
     }
 
+    @Override
+    @Transactional
+    public AiSessionSummary createSession(PatientAuthPrincipal principal) {
+        String sessionId = UUID.randomUUID().toString();
+        String userId = principal.getId().toString();
+        TriageSession session = getOrCreateSession(userId, sessionId);
+        return new AiSessionSummary(
+                session.getSessionId(),
+                "新会话",
+                session.getAskRound(),
+                session.getUpdateTime());
+    }
+
+    @Override
+    @Transactional
+    public void deleteSession(PatientAuthPrincipal principal, String sessionId) {
+        if (!StringUtils.hasText(sessionId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sessionId 不能为空");
+        }
+        TriageSession session = triageSessionRepository.findBySessionId(sessionId.trim()).orElse(null);
+        if (session == null || !principal.getId().toString().equals(session.getUserId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "会话不存在");
+        }
+        // 先删除轮次数据，再删除会话
+        triageTurnRepository.deleteBySessionId(sessionId.trim());
+        triageSessionRepository.deleteBySessionId(sessionId.trim());
+        // 清理 Redis 缓存
+        try {
+            redissonClient.getList(historyCacheKey(sessionId.trim())).delete();
+        } catch (RuntimeException ignored) {
+            // Redis 不可用时忽略缓存清理失败
+        }
+    }
+
     // ==================== 系统提示词构建 ====================
 
     private String buildSystemPrompt(
@@ -438,6 +476,8 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
             sb.append("""
                     上面已有分析结果，用户当前是追问或补充需求。请直接回应用户的当前请求，
                     使用历史上下文中已有的症状信息，不要再重复做结构化分析。回答简洁聚焦。
+                    如果用户的消息与医疗健康完全无关（如闲聊、编程、娱乐等），
+                    请友好说明你的服务范围仅限于医疗健康咨询，并引导用户回到健康话题。
                     """);
         } else {
             sb.append("""
@@ -449,6 +489,8 @@ public class AiAnalysisServiceImpl implements AiAnalysisService {
                     4. 说明这不是最终临床诊断
                     先从常见病因解释，再补充少见病因，最后讨论重症排查。
                     若没有红旗证据，不要直接给出癌症/肿瘤结论。
+                    如果用户的消息与医疗健康完全无关（如闲聊、编程、娱乐等），
+                    请友好说明你的服务范围仅限于医疗健康咨询，并引导用户描述健康问题。
                     """);
         }
         return sb.toString();

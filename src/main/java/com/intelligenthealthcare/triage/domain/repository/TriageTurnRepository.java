@@ -15,4 +15,6 @@ public interface TriageTurnRepository {
     List<TriageTurn> findAllBySessionId(String sessionId);
 
     void save(TriageTurn turn);
+
+    void deleteBySessionId(String sessionId);
 }

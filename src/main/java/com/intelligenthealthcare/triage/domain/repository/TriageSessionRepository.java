@@ -19,4 +19,6 @@ public interface TriageSessionRepository {
     void save(TriageSession session);
 
     void updateById(TriageSession session);
+
+    void deleteBySessionId(String sessionId);
 }

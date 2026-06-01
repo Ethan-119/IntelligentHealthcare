@@ -41,4 +41,8 @@ public interface AiAnalysisService {
     List<AiSessionSummary> listMySessions(PatientAuthPrincipal principal);
 
     AiSessionConversation getSessionConversation(PatientAuthPrincipal principal, String sessionId);
+
+    AiSessionSummary createSession(PatientAuthPrincipal principal);
+
+    void deleteSession(PatientAuthPrincipal principal, String sessionId);
 }

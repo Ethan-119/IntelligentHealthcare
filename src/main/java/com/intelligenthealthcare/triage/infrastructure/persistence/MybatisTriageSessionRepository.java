@@ -47,4 +47,11 @@ public class MybatisTriageSessionRepository implements TriageSessionRepository {
     public void updateById(TriageSession session) {
         triageSessionMapper.updateById(session);
     }
+
+    @Override
+    public void deleteBySessionId(String sessionId) {
+        LambdaQueryWrapper<TriageSession> query = new LambdaQueryWrapper<>();
+        query.eq(TriageSession::getSessionId, sessionId);
+        triageSessionMapper.delete(query);
+    }
 }
