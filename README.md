@@ -9,7 +9,7 @@
 | 框架     | Spring Boot 3.4.4 + Java 17          | 主应用框架                           |
 | AI       | Spring AI 1.1.5 + MCP                | LLM 调用、工具编排、模型上下文协议   |
 | LLM      | DashScope (qwen-plus / qwen-vl-plus) | 通义千问 / 千问视觉，OpenAI 兼容协议 |
-| 数据库   | PostgreSQL + pgvector                | 业务数据 + 向量存储                  |
+| 数据库   | PostgreSQL                            | 业务数据                           |
 | 文档库   | MongoDB                              | 知识文档、embedding 向量             |
 | 缓存     | Redis + Redisson 3.52.0              | 分布式缓存、分布式锁                 |
 | ORM      | MyBatis-Plus 3.5.9                   | 数据访问层                           |
