@@ -57,13 +57,15 @@
 | `PATIENT_PROFILE`          | 用户档案读取                      |
 | `imageVisionTool`          | MCP 图片视觉分析（皮肤病/影像等） |
 
+注：MCP搭建好了并未使用，采用Spring AI 内置多模态。
+
 ## 快速开始
 
 ### 环境要求
 
 - JDK 17+
 - Maven 3.8+
-- PostgreSQL（含 pgvector 扩展）
+- PostgreSQL
 - MongoDB
 - Redis
 - 阿里云 DashScope API Key
